@@ -259,9 +259,13 @@ main() {
             extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
             cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
 
+            # Direct exit link (no relay hop)
+            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto#Direct%20Exit"
+
             # Escape % for systemd
             local link_escaped="${cdn_vless_link//%/%%}"
             local link_asym_escaped="${cdn_vless_link_asym//%/%%}"
+            local direct_escaped="${direct_vless_link//%/%%}"
 
             # Read existing service params
             local sub_upstream sub_proxy_port
@@ -271,13 +275,14 @@ main() {
             # Rewrite entire service file (never sed — & in URLs breaks sed)
             cat > "$sub_proxy_service" << SVCEOF
 [Unit]
-Description=Subscription proxy (appends CDN link)
+Description=Subscription proxy (appends extra links)
 After=x-ui.service
 
 [Service]
 Type=simple
 Environment=CDN_VLESS_LINK=${link_escaped}
 Environment=CDN_VLESS_LINK_ASYM=${link_asym_escaped}
+Environment=DIRECT_VLESS_LINK=${direct_escaped}
 Environment=CDN_DOMAIN=${cdn_domain}
 Environment=CDN_PATH=${cdn_path}
 Environment=SUB_UPSTREAM=${sub_upstream}

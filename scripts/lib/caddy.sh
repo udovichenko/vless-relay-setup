@@ -255,8 +255,9 @@ setup_sub_proxy() {
     local cdn_domain="${4:-}"
     local cdn_path="${5:-}"
     local cdn_vless_link_asym="${6:-}"
+    local direct_vless_link="${7:-}"
 
-    log_info "Setting up subscription proxy for CDN..."
+    log_info "Setting up subscription proxy..."
 
     # Install the proxy script
     local script_dir
@@ -266,11 +267,12 @@ setup_sub_proxy() {
     # Escape % for systemd (% is a specifier prefix in unit files)
     local escaped_link="${cdn_vless_link//%/%%}"
     local escaped_link_asym="${cdn_vless_link_asym//%/%%}"
+    local escaped_direct="${direct_vless_link//%/%%}"
 
     # Create systemd service
     cat > /etc/systemd/system/sub-proxy.service << SVCEOF
 [Unit]
-Description=Subscription proxy (appends CDN link)
+Description=Subscription proxy (appends extra links)
 After=x-ui.service
 
 [Service]
@@ -278,6 +280,7 @@ Type=simple
 Environment=SUB_UPSTREAM=http://127.0.0.1:${sub_port}
 Environment=CDN_VLESS_LINK=${escaped_link}
 Environment=CDN_VLESS_LINK_ASYM=${escaped_link_asym}
+Environment=DIRECT_VLESS_LINK=${escaped_direct}
 Environment=CDN_DOMAIN=${cdn_domain}
 Environment=CDN_PATH=${cdn_path}
 Environment=SUB_PROXY_PORT=${proxy_port}

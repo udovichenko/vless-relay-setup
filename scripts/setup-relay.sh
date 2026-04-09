@@ -227,8 +227,12 @@ main() {
             extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
             cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
 
+            # Direct exit link (no relay, fastest path)
+            local direct_vless_link
+            direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto#Direct%20Exit"
+
             sub_proxy_port=$((sub_port + 1))
-            setup_sub_proxy "$sub_port" "$cdn_vless_link" "$sub_proxy_port" "$cdn_domain" "$cdn_path" "$cdn_vless_link_asym"
+            setup_sub_proxy "$sub_port" "$cdn_vless_link" "$sub_proxy_port" "$cdn_domain" "$cdn_path" "$cdn_vless_link_asym" "$direct_vless_link"
             caddy_sub_port="$sub_proxy_port"
         fi
 
