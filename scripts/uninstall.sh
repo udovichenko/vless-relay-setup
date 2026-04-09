@@ -6,6 +6,7 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/caddy.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/lib/hysteria.sh" 2>/dev/null || true
 
 FORCE=false
 PURGE_CERTS=false
@@ -32,6 +33,7 @@ confirm_uninstall() {
     echo "  - UFW firewall rules"
     echo "  - SSL certificates (only with --purge-certs)"
     echo "  - sqlite3, socat"
+    echo "  - Hysteria 2 server (if installed)"
     echo "  - Caddy web server (if installed)"
     echo ""
     echo "  SSH keys and sshd_config will NOT be touched."
@@ -143,6 +145,22 @@ main() {
     uninstall_acme
     uninstall_fail2ban
     uninstall_ufw
+    # Hysteria 2
+    if type uninstall_hysteria &>/dev/null; then
+        if [[ -f /usr/local/bin/hysteria ]] || [[ -f /etc/hysteria/config.yaml ]]; then
+            uninstall_hysteria
+        fi
+    else
+        if [[ -f /usr/local/bin/hysteria ]]; then
+            log_info "Removing Hysteria 2..."
+            systemctl stop hysteria-server 2>/dev/null || true
+            systemctl disable hysteria-server 2>/dev/null || true
+            rm -f /usr/local/bin/hysteria 2>/dev/null || true
+            rm -rf /etc/hysteria 2>/dev/null || true
+            userdel hysteria 2>/dev/null || true
+            log_ok "Hysteria 2 removed"
+        fi
+    fi
     # Caddy (SelfSteal)
     if type uninstall_caddy &>/dev/null; then
         if systemctl is-active caddy &>/dev/null || dpkg -l caddy &>/dev/null 2>&1; then
