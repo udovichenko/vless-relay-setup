@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
+source "$SCRIPT_DIR/lib/hysteria.sh"
 source "$SCRIPT_DIR/lib/verify.sh"
 source "$SCRIPT_DIR/lib/caddy.sh"
 
@@ -152,6 +153,31 @@ main() {
         fi
     fi
 
+    # --- Step 5b: Update Hysteria 2 if installed ---
+    local is_hysteria=false
+    if [[ -f "$HYSTERIA_CONFIG" ]]; then
+        is_hysteria=true
+        log_info "Hysteria 2 detected"
+
+        if [[ "$upgrade" == true ]]; then
+            log_info "Upgrading Hysteria 2..."
+            bash <(curl -fsSL https://get.hy2.sh/) < /dev/null 2>/dev/null || true
+            log_ok "Hysteria 2 upgraded"
+        fi
+
+        # Update certs from Caddy (may have been renewed)
+        if [[ "$is_selfsteal" == true ]]; then
+            update_hysteria_certs "$server_name"
+        fi
+
+        systemctl restart hysteria-server
+        if systemctl is-active --quiet hysteria-server; then
+            log_ok "Hysteria 2 restarted"
+        else
+            log_warn "Hysteria 2 failed to restart. Check: journalctl -u hysteria-server"
+        fi
+    fi
+
     # --- Step 6: Security ---
     log_info "=== Security ==="
     local ssh_port
@@ -169,6 +195,14 @@ main() {
         security_args+=(80:Caddy-ACME)
     fi
     setup_security "${security_args[@]}"
+    if [[ "$is_hysteria" == true ]]; then
+        local hy_port hy_port_end
+        hy_port=$(grep -oP '(?<=^listen: :)\d+' "$HYSTERIA_CONFIG") || true
+        hy_port_end=$(grep -oP '(?<=^listen: :\d+-)\d+' "$HYSTERIA_CONFIG") || true
+        if [[ -n "$hy_port" && -n "$hy_port_end" ]]; then
+            ufw allow "${hy_port}:${hy_port_end}/udp" comment "Hysteria2" > /dev/null 2>&1 || true
+        fi
+    fi
 
     # --- Step 7: Update exit-server-info.txt ---
     local server_ip
@@ -194,6 +228,20 @@ EOF
 CDN_DOMAIN=$cdn_domain
 CDN_PATH=$cdn_path
 CDN_PORT=$cdn_port
+EOF
+        fi
+    fi
+
+    if [[ "$is_hysteria" == true ]]; then
+        local hy_port hy_port_end hy_obfs
+        hy_port=$(grep -oP '(?<=^listen: :)\d+' "$HYSTERIA_CONFIG") || true
+        hy_port_end=$(grep -oP '(?<=^listen: :\d+-)\d+' "$HYSTERIA_CONFIG") || true
+        hy_obfs=$(grep -A2 'salamander:' "$HYSTERIA_CONFIG" | grep 'password:' | sed 's/.*password: *"\?\([^"]*\)"\?/\1/') || true
+        if [[ -n "$hy_port" ]]; then
+            cat >> /root/exit-server-info.txt << EOF
+HYSTERIA_PORT=$hy_port
+HYSTERIA_PORT_END=$hy_port_end
+HYSTERIA_OBFS=$hy_obfs
 EOF
         fi
     fi
