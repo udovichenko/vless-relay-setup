@@ -50,7 +50,7 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
 
 ### Features
 
-- **VLESS + XTLS-Reality** — TLS 1.3 encrypted transport with minimal overhead
+- **VLESS + XTLS-Reality + XHTTP** — end-to-end TLS 1.3 encryption with XHTTP transport on both hops
 - **Multi-tier CDN Fallback** — backup routes through Cloudflare with asymmetric mode
 - **Adaptive connection protection** — packet padding and connection multiplexing
 - **3X-UI panel** — web interface for user management, traffic limits, and monitoring
