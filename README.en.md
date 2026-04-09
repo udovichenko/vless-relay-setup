@@ -42,6 +42,18 @@ CDN Fallback supports two modes. Asymmetric sends outbound traffic through CDN w
 
 CDN Fallback requires SelfSteal (needs Caddy) and a separate domain connected to Cloudflare. Cloudflare setup is manual (instructions are shown during installation).
 
+### Direct Exit (automatic)
+
+Direct connection to the exit server without passing through the relay. Single hop instead of two — minimal latency. The link is automatically added to the subscription with the lowest priority: the client uses it only when relay and CDN are unavailable.
+
+```
+Subscription (priority order):
+  ① Relay → Exit          primary
+  ② CDN Asymmetric        fallback (fast)
+  ③ CDN Symmetric         fallback (resilient)
+  ④ Direct Exit           fastest, but less reliable
+```
+
 ### DNS Filtering
 
 The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No client-side configuration needed.
