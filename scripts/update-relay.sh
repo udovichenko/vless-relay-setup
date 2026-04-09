@@ -175,6 +175,17 @@ main() {
         local s_stream="${patched_stream//\'/\'\'}"
         sqlite3 "$XUI_DB" \
             "UPDATE inbounds SET stream_settings='${s_stream}' WHERE tag='inbound-443';"
+        # Clear flow from all clients — flow is incompatible with XHTTP
+        # (Shadowrocket and other clients connect without flow on XHTTP)
+        local current_settings patched_settings
+        current_settings=$(sqlite3 "$XUI_DB" \
+            "SELECT settings FROM inbounds WHERE tag='inbound-443';")
+        patched_settings=$(echo "$current_settings" | jq -c \
+            '.clients = [.clients[] | .flow = ""]')
+        local s_settings="${patched_settings//\'/\'\'}"
+        sqlite3 "$XUI_DB" \
+            "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-443';"
+
         log_ok "Relay inbound migrated from TCP to XHTTP"
     fi
 
