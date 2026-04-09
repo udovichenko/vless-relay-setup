@@ -106,6 +106,17 @@ main() {
         log_info "CDN mode detected"
     fi
 
+    # Detect current relay inbound transport (TCP or XHTTP)
+    local current_network
+    current_network=$(sqlite3 "$XUI_DB" \
+        "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';" | \
+        jq -r '.network') || true
+    if [[ "$current_network" == "xhttp" ]]; then
+        log_info "XHTTP inbound detected"
+    else
+        log_info "TCP inbound detected — will migrate to XHTTP"
+    fi
+
     # --- Step 3: System update ---
     log_info "=== System Update ==="
     update_system
@@ -142,6 +153,29 @@ main() {
         sqlite3 "$XUI_DB" \
             "UPDATE inbounds SET sniffing='${s_sniffing}' WHERE tag='inbound-443';"
         log_ok "Inbound sniffing patched (routeOnly: true)"
+    fi
+
+    # Migrate TCP inbound to XHTTP if still on TCP
+    if [[ "$current_network" != "xhttp" ]]; then
+        local relay_xhttp_path
+        relay_xhttp_path=$(generate_random_path)
+        log_info "Migrating relay inbound to XHTTP (path: $relay_xhttp_path)..."
+
+        local current_stream patched_stream
+        current_stream=$(sqlite3 "$XUI_DB" \
+            "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';")
+        patched_stream=$(echo "$current_stream" | jq -c \
+            --arg relay_path "$relay_xhttp_path" \
+            '.network = "xhttp"
+            | .xhttpSettings = {
+                path: ("/"+$relay_path),
+                mode: "auto"
+            }
+            | del(.tcpSettings)')
+        local s_stream="${patched_stream//\'/\'\'}"
+        sqlite3 "$XUI_DB" \
+            "UPDATE inbounds SET stream_settings='${s_stream}' WHERE tag='inbound-443';"
+        log_ok "Relay inbound migrated from TCP to XHTTP"
     fi
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
