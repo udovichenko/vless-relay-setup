@@ -34,6 +34,15 @@ CDN Fallback (optional, requires SelfSteal):
   Separate domain on Cloudflare (Proxied, SSL: Full)
   Exit: Caddy routes CDN path to local XRAY XHTTP inbound
   Relay: sub-proxy appends CDN VLESS links (symmetric + asymmetric) to subscriptions
+
+Hysteria 2 (optional, requires SelfSteal):
+  Client → Exit:UDP_RANGE (Hysteria 2 + Salamander obfuscation)
+  Standalone binary alongside XRAY, independent systemd service
+  Auth: exit UUID as password, TLS cert: copied from Caddy's Let's Encrypt
+  Config: /etc/hysteria/config.yaml, certs: /etc/hysteria/certs/
+  Port hopping: native listen on UDP range (e.g. 34821-35821)
+  Masquerade: reverse proxy to SelfSteal site
+  Link added to subscription via sub-proxy HYSTERIA_LINK env var
 ```
 
 **Exit server**: XRAY runs as systemd service, config in `/usr/local/etc/xray/config.json`.
@@ -61,7 +70,8 @@ All sourced via `BASH_SOURCE` from orchestration scripts:
 - `xray.sh` — XRAY installation, exit server JSON config (including optional CDN XHTTP inbound with padding)
 - `3xui.sh` — 3X-UI install/configure, SQLite operations, SSL certs, inbound/template management
 - `verify.sh` — post-setup smoke tests (services, ports, connectivity)
-- `sub-proxy.py` — subscription proxy: sits between Caddy and 3X-UI subscription, appends CDN VLESS links (symmetric + asymmetric). Passes through HTML pages (QR codes) for browsers, modifies only base64 responses for apps
+- `hysteria.sh` — Hysteria 2 installation, YAML config generation, cert copy from Caddy, restart, uninstall
+- `sub-proxy.py` — subscription proxy: sits between Caddy and 3X-UI subscription, appends CDN VLESS + Hysteria 2 links. Passes through HTML pages (QR codes) for browsers, modifies only base64 responses for apps
 
 ## Critical Patterns
 
@@ -136,6 +146,14 @@ CDN Fallback adds an XHTTP inbound on exit (localhost-only, packet-up mode) and 
 ### Caddy Unix Socket Permissions
 
 XRAY runs as `nobody` but Caddy creates `/dev/shm/caddy.sock` with mode `0600` (root-only). `start_caddy()` does `chmod 0666` after start so XRAY can connect to the socket for Reality dest forwarding.
+
+### Hysteria 2 TLS Certificates
+
+Hysteria 2 uses Caddy's Let's Encrypt certs, copied to `/etc/hysteria/certs/`. Hysteria runs as user `hysteria` (created by installer), so `cert.key` needs `root:hysteria` ownership and mode `0640`. `update-exit.sh` refreshes certs on every run (Caddy may have auto-renewed). Config is YAML, not JSON — written via heredoc, not jq.
+
+### Hysteria 2 Port Hopping
+
+Hysteria standalone natively supports listening on a port range (`listen: :PORT-PORT_END`). No iptables rules needed. Client URL includes the range: `hysteria2://...@host:port,port-port_end/...`. UFW opens the entire range as UDP: `ufw allow PORT:PORT_END/udp`.
 
 ### Custom SSH Port
 
