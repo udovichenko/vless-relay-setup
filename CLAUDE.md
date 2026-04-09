@@ -10,7 +10,7 @@ Two-server VPN deployment automation: relay (entry node) + exit (exit node) usin
 
 ```
 User → Relay server (3X-UI + embedded XRAY, port 443)
-         → VLESS Reality TCP inbound (sniffing: routeOnly)
+         → VLESS Reality XHTTP inbound (sniffing: routeOnly)
          → fragment outbound (splits TLS ClientHello for DPI bypass)
          → proxy-exit outbound (VLESS Reality XHTTP, dialerProxy: fragment)
               → Exit server (standalone XRAY, port 443)
