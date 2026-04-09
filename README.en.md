@@ -51,8 +51,15 @@ Subscription (priority order):
   ① Relay → Exit          primary
   ② CDN Asymmetric        fallback (fast)
   ③ CDN Symmetric         fallback (resilient)
-  ④ Direct Exit           fastest, but less reliable
+  ④ Hysteria 2            UDP channel (Salamander + port hopping)
+  ⑤ Direct Exit           fastest, but less reliable
 ```
+
+### Hysteria 2 (optional)
+
+UDP channel using the Hysteria 2 protocol. Runs over QUIC with Salamander obfuscation (traffic is indistinguishable from random data) and port hopping (client switches between ports every few seconds). Resilient to UDP blocking — no fixed port and no identifiable QUIC headers.
+
+Requires SelfSteal (needs TLS certificate). Link is added to subscription automatically. Hysteria 2 runs as a separate process alongside XRAY — two channels are fully independent.
 
 ### DNS Filtering
 
@@ -65,6 +72,7 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
 - **VLESS + XTLS-Reality + XHTTP** — end-to-end TLS 1.3 encryption with XHTTP transport on both hops
 - **Multi-tier CDN Fallback** — backup routes through Cloudflare with asymmetric mode
 - **Adaptive connection protection** — packet padding and connection multiplexing
+- **Hysteria 2 (UDP)** — fallback channel with Salamander obfuscation and port hopping
 - **3X-UI panel** — web interface for user management, traffic limits, and monitoring
 - **Subscriptions** — automatic configuration updates on client devices
 - **SSH hardening + fail2ban + UFW** — automated server security configuration
@@ -140,9 +148,10 @@ With SelfSteal enabled, the script will also install Caddy, issue an SSL certifi
 
 ```
 CDN domain for Cloudflare (Enter to skip): ← CDN domain or Enter
+Hysteria 2 UDP port (Enter to skip):      ← Hysteria 2 port or Enter
 ```
 
-If a CDN domain is provided, the script configures a CDN route through Caddy. Cloudflare setup instructions are shown at the end.
+If a CDN domain is provided, the script configures a CDN route through Caddy. Cloudflare setup instructions are shown at the end. Hysteria 2 is installed as a separate process alongside XRAY (UDP, port hopping + Salamander).
 
 The script outputs connection parameters at the end — **save them** for relay setup:
 
