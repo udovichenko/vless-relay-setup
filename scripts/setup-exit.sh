@@ -9,6 +9,7 @@ source "$SCRIPT_DIR/lib/reality.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
 source "$SCRIPT_DIR/lib/caddy.sh"
+source "$SCRIPT_DIR/lib/hysteria.sh"
 source "$SCRIPT_DIR/lib/verify.sh"
 
 main() {
@@ -86,6 +87,20 @@ main() {
         fi
     fi
 
+    local hysteria_port="" hysteria_port_end="" hysteria_obfs=""
+    if [[ -n "$selfsteal_domain" ]]; then
+        prompt_input "Hysteria 2 UDP port (Enter to skip)" hysteria_port ""
+        if [[ -n "$hysteria_port" ]]; then
+            if ! [[ "$hysteria_port" =~ ^[0-9]+$ ]] || [[ "$hysteria_port" -lt 1024 || "$hysteria_port" -gt 64535 ]]; then
+                log_error "Invalid port: $hysteria_port (must be 1024-64535)"
+                exit 1
+            fi
+            hysteria_port_end=$((hysteria_port + 1000))
+            hysteria_obfs=$(openssl rand -hex 16)
+            log_info "Hysteria 2: UDP ${hysteria_port}-${hysteria_port_end}, Salamander enabled"
+        fi
+    fi
+
     # --- Step 2: System setup ---
     log_info "=== System Setup ==="
     update_system
@@ -148,6 +163,15 @@ main() {
         setup_caddy_systemd_dependency "xray"
     fi
 
+    # --- Hysteria 2 (optional, requires SelfSteal) ---
+    if [[ -n "$hysteria_port" ]]; then
+        log_info "=== Hysteria 2 Setup ==="
+        install_hysteria
+        configure_hysteria "$hysteria_port" "$hysteria_port_end" \
+            "$selfsteal_domain" "$exit_uuid" "$hysteria_obfs"
+        restart_hysteria
+    fi
+
     # --- Step 5: Security ---
     log_info "=== Security Setup ==="
     local security_args=()
@@ -157,6 +181,10 @@ main() {
         security_args+=(80:Caddy-ACME)
     fi
     setup_security "${security_args[@]}"
+    if [[ -n "$hysteria_port" ]]; then
+        ufw allow "${hysteria_port}:${hysteria_port_end}/udp" comment "Hysteria2" > /dev/null 2>&1 || true
+        log_ok "UFW: UDP ${hysteria_port}:${hysteria_port_end} opened for Hysteria 2"
+    fi
 
     # --- Step 6: Verify ---
     verify_exit_server "$panel_port" "${selfsteal_domain:-}" "${cdn_port:-}"
@@ -185,6 +213,14 @@ CDN_PORT=$cdn_port
 EOF
     fi
 
+    if [[ -n "$hysteria_port" ]]; then
+        cat >> /root/exit-server-info.txt << EOF
+HYSTERIA_PORT=$hysteria_port
+HYSTERIA_PORT_END=$hysteria_port_end
+HYSTERIA_OBFS=$hysteria_obfs
+EOF
+    fi
+
     echo ""
     echo "==========================================="
     log_ok "EXIT server setup complete!"
@@ -199,6 +235,9 @@ EOF
     fi
     if [[ -n "$cdn_domain" ]]; then
         echo "  CDN:       ${cdn_domain} (Cloudflare CDN)"
+    fi
+    if [[ -n "$hysteria_port" ]]; then
+        echo "  Hysteria2: UDP ${hysteria_port}-${hysteria_port_end} (Salamander)"
     fi
     echo ""
     echo "  Panel:     https://${server_ip}:${panel_port}/${panel_path}/"
@@ -224,6 +263,11 @@ EOF
     if [[ -n "$cdn_domain" ]]; then
         echo "  Exit CDN domain:      $cdn_domain"
         echo "  Exit CDN path:        $cdn_path"
+    fi
+    if [[ -n "$hysteria_port" ]]; then
+        echo "  Exit Hysteria port:   $hysteria_port"
+        echo "  Exit Hysteria range:  $hysteria_port-$hysteria_port_end"
+        echo "  Exit Hysteria obfs:   $hysteria_obfs"
     fi
     echo "-------------------------------------------"
     echo ""
