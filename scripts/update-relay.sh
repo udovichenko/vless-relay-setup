@@ -262,10 +262,22 @@ main() {
             # Direct exit link (no relay hop)
             local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto#Direct%20Exit"
 
+            # Hysteria 2 link
+            local hysteria_link=""
+            local hy_port hy_port_end hy_obfs
+            hy_port=$(grep -oP '(?<=HYSTERIA_PORT=).+' "$sub_proxy_service") || true
+            hy_port_end=$(grep -oP '(?<=HYSTERIA_PORT_END=).+' "$sub_proxy_service") || true
+            hy_obfs=$(grep -oP '(?<=HYSTERIA_OBFS=).+' "$sub_proxy_service") || true
+            if [[ -n "$hy_port" && -n "$hy_obfs" ]]; then
+                hysteria_link="hysteria2://${exit_uuid}@${exit_ip}:${hy_port},${hy_port}-${hy_port_end}/?obfs=salamander&obfs-password=${hy_obfs}&sni=${exit_sni}&insecure=0#Hysteria%202"
+                log_info "Hysteria 2 link updated"
+            fi
+
             # Escape % for systemd
             local link_escaped="${cdn_vless_link//%/%%}"
             local link_asym_escaped="${cdn_vless_link_asym//%/%%}"
             local direct_escaped="${direct_vless_link//%/%%}"
+            local hysteria_escaped="${hysteria_link//%/%%}"
 
             # Read existing service params
             local sub_upstream sub_proxy_port
@@ -283,6 +295,10 @@ Type=simple
 Environment=CDN_VLESS_LINK=${link_escaped}
 Environment=CDN_VLESS_LINK_ASYM=${link_asym_escaped}
 Environment=DIRECT_VLESS_LINK=${direct_escaped}
+Environment=HYSTERIA_LINK=${hysteria_escaped}
+Environment=HYSTERIA_PORT=${hy_port}
+Environment=HYSTERIA_PORT_END=${hy_port_end}
+Environment=HYSTERIA_OBFS=${hy_obfs}
 Environment=CDN_DOMAIN=${cdn_domain}
 Environment=CDN_PATH=${cdn_path}
 Environment=SUB_UPSTREAM=${sub_upstream}
