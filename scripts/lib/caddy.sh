@@ -257,6 +257,9 @@ setup_sub_proxy() {
     local cdn_vless_link_asym="${6:-}"
     local direct_vless_link="${7:-}"
     local hysteria_link="${8:-}"
+    local hysteria_port="${9:-}"
+    local hysteria_port_end="${10:-}"
+    local hysteria_obfs="${11:-}"
 
     log_info "Setting up subscription proxy..."
 
@@ -284,6 +287,9 @@ Environment=CDN_VLESS_LINK=${escaped_link}
 Environment=CDN_VLESS_LINK_ASYM=${escaped_link_asym}
 Environment=DIRECT_VLESS_LINK=${escaped_direct}
 Environment=HYSTERIA_LINK=${escaped_hysteria}
+Environment=HYSTERIA_PORT=${hysteria_port}
+Environment=HYSTERIA_PORT_END=${hysteria_port_end}
+Environment=HYSTERIA_OBFS=${hysteria_obfs}
 Environment=CDN_DOMAIN=${cdn_domain}
 Environment=CDN_PATH=${cdn_path}
 Environment=SUB_PROXY_PORT=${proxy_port}

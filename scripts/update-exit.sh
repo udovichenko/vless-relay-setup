@@ -198,7 +198,7 @@ main() {
     if [[ "$is_hysteria" == true ]]; then
         local hy_port hy_port_end
         hy_port=$(grep -oP '(?<=^listen: :)\d+' "$HYSTERIA_CONFIG") || true
-        hy_port_end=$(grep -oP '(?<=^listen: :\d+-)\d+' "$HYSTERIA_CONFIG") || true
+        hy_port_end=$(grep '^listen:' "$HYSTERIA_CONFIG" | grep -oP '(?<=-)\d+$') || true
         if [[ -n "$hy_port" && -n "$hy_port_end" ]]; then
             ufw allow "${hy_port}:${hy_port_end}/udp" comment "Hysteria2" > /dev/null 2>&1 || true
         fi
@@ -235,7 +235,7 @@ EOF
     if [[ "$is_hysteria" == true ]]; then
         local hy_port hy_port_end hy_obfs
         hy_port=$(grep -oP '(?<=^listen: :)\d+' "$HYSTERIA_CONFIG") || true
-        hy_port_end=$(grep -oP '(?<=^listen: :\d+-)\d+' "$HYSTERIA_CONFIG") || true
+        hy_port_end=$(grep '^listen:' "$HYSTERIA_CONFIG" | grep -oP '(?<=-)\d+$') || true
         hy_obfs=$(grep -A2 'salamander:' "$HYSTERIA_CONFIG" | grep 'password:' | sed 's/.*password: *"\?\([^"]*\)"\?/\1/') || true
         if [[ -n "$hy_port" ]]; then
             cat >> /root/exit-server-info.txt << EOF
