@@ -246,7 +246,7 @@ create_3xui_relay_inbound() {
         '{
             clients: [{
                 id: $uuid,
-                flow: "xtls-rprx-vision",
+                flow: "",
                 email: "default-user",
                 limitIp: 0,
                 totalGB: 0,
