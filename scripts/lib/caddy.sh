@@ -256,6 +256,7 @@ setup_sub_proxy() {
     local cdn_path="${5:-}"
     local cdn_vless_link_asym="${6:-}"
     local direct_vless_link="${7:-}"
+    local hysteria_link="${8:-}"
 
     log_info "Setting up subscription proxy..."
 
@@ -268,6 +269,7 @@ setup_sub_proxy() {
     local escaped_link="${cdn_vless_link//%/%%}"
     local escaped_link_asym="${cdn_vless_link_asym//%/%%}"
     local escaped_direct="${direct_vless_link//%/%%}"
+    local escaped_hysteria="${hysteria_link//%/%%}"
 
     # Create systemd service
     cat > /etc/systemd/system/sub-proxy.service << SVCEOF
@@ -281,6 +283,7 @@ Environment=SUB_UPSTREAM=http://127.0.0.1:${sub_port}
 Environment=CDN_VLESS_LINK=${escaped_link}
 Environment=CDN_VLESS_LINK_ASYM=${escaped_link_asym}
 Environment=DIRECT_VLESS_LINK=${escaped_direct}
+Environment=HYSTERIA_LINK=${escaped_hysteria}
 Environment=CDN_DOMAIN=${cdn_domain}
 Environment=CDN_PATH=${cdn_path}
 Environment=SUB_PROXY_PORT=${proxy_port}

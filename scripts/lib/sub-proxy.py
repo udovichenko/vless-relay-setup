@@ -18,6 +18,7 @@ UPSTREAM = os.environ.get("SUB_UPSTREAM", "http://127.0.0.1:8443")
 CDN_LINK = os.environ.get("CDN_VLESS_LINK", "")
 CDN_LINK_ASYM = os.environ.get("CDN_VLESS_LINK_ASYM", "")
 DIRECT_LINK = os.environ.get("DIRECT_VLESS_LINK", "")
+HYSTERIA_LINK = os.environ.get("HYSTERIA_LINK", "")
 LISTEN_PORT = int(os.environ.get("SUB_PROXY_PORT", "18443"))
 
 
@@ -61,6 +62,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             cdn_links.append(CDN_LINK_ASYM)
         if CDN_LINK:
             cdn_links.append(CDN_LINK)
+        if HYSTERIA_LINK:
+            cdn_links.append(HYSTERIA_LINK)
         if DIRECT_LINK:
             cdn_links.append(DIRECT_LINK)
         if cdn_links:
