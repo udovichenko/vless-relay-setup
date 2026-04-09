@@ -169,7 +169,8 @@ configure_3xui_relay_template() {
                             shortId: $exit_short_id
                         },
                         sockopt: {
-                            dialerProxy: "fragment"
+                            dialerProxy: "fragment",
+                            tcpKeepAliveInterval: 30
                         }
                     }
                 },
