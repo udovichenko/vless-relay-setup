@@ -195,51 +195,55 @@ main() {
 
         x-ui start
 
-        # CDN subscription proxy: sits between Caddy and 3X-UI subscription,
-        # appends the correct CDN VLESS link to every subscription response.
+        # Subscription proxy: sits between Caddy and 3X-UI subscription,
+        # appends extra links (CDN, Direct Exit, Hysteria) to every subscription response.
         # Must be set up BEFORE Caddyfile generation so Caddy gets the proxy port.
         local caddy_sub_port="$sub_port"
-        if [[ -n "$cdn_domain" && -n "$sub_port" ]]; then
-            # Symmetric XHTTP CDN link
-            local cdn_vless_link sub_proxy_port
-            cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
+        if [[ -n "$sub_port" ]] && [[ -n "$cdn_domain" || -n "$hysteria_port" ]]; then
+            local cdn_vless_link="" cdn_vless_link_asym="" sub_proxy_port
 
-            # Asymmetric CDN link with downloadSettings
-            local cdn_vless_link_asym="" download_extra extra_encoded
-            download_extra=$(jq -n -c \
-                --arg padding "100-1000" \
-                --arg exit_addr "$exit_ip" \
-                --arg exit_sni_val "$exit_sni" \
-                --arg exit_pubkey_val "$exit_pubkey" \
-                --arg exit_short_id_val "$exit_short_id" \
-                --arg exit_path "$exit_xhttp_path" \
-                '{
-                    xPaddingBytes: $padding,
-                    downloadSettings: {
-                        address: $exit_addr,
-                        port: 443,
-                        network: "xhttp",
-                        security: "reality",
-                        realitySettings: {
-                            serverName: $exit_sni_val,
-                            publicKey: $exit_pubkey_val,
-                            shortId: $exit_short_id_val,
-                            fingerprint: "chrome"
-                        },
-                        xhttpSettings: {
-                            path: ("/"+$exit_path),
-                            mode: "auto"
+            # CDN links — only when CDN Fallback is configured
+            if [[ -n "$cdn_domain" ]]; then
+                # Symmetric XHTTP CDN link
+                cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
+
+                # Asymmetric CDN link with downloadSettings
+                local download_extra extra_encoded
+                download_extra=$(jq -n -c \
+                    --arg padding "100-1000" \
+                    --arg exit_addr "$exit_ip" \
+                    --arg exit_sni_val "$exit_sni" \
+                    --arg exit_pubkey_val "$exit_pubkey" \
+                    --arg exit_short_id_val "$exit_short_id" \
+                    --arg exit_path "$exit_xhttp_path" \
+                    '{
+                        xPaddingBytes: $padding,
+                        downloadSettings: {
+                            address: $exit_addr,
+                            port: 443,
+                            network: "xhttp",
+                            security: "reality",
+                            realitySettings: {
+                                serverName: $exit_sni_val,
+                                publicKey: $exit_pubkey_val,
+                                shortId: $exit_short_id_val,
+                                fingerprint: "chrome"
+                            },
+                            xhttpSettings: {
+                                path: ("/"+$exit_path),
+                                mode: "auto"
+                            }
                         }
-                    }
-                }')
-            extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
-            cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+                    }')
+                extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
+                cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+            fi
 
-            # Direct exit link (no relay, fastest path)
+            # Direct exit link (no relay, fastest path) — always available
             local direct_vless_link
             direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto#Direct%20Exit"
 
-            # Hysteria 2 link
+            # Hysteria 2 link — only when Hysteria is configured
             local hysteria_link=""
             if [[ -n "$hysteria_port" ]]; then
                 hysteria_link="hysteria2://${exit_uuid}@${exit_ip}:${hysteria_port},${hysteria_port}-${hysteria_port_end}/?obfs=salamander&obfs-password=${hysteria_obfs}&sni=${exit_sni}&insecure=0#Hysteria%202"

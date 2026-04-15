@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Subscription proxy: fetches from 3X-UI and appends CDN VLESS link.
+"""Subscription proxy: fetches from 3X-UI and appends extra VPN links.
 
+Appends CDN VLESS, Direct Exit, and Hysteria 2 links to subscriptions.
 Browser requests (Accept: text/html) are passed through as-is so the
 3X-UI subscription page with QR codes works normally.
 
-App requests (no Accept: text/html) get the CDN link appended to the
+App requests (no Accept: text/html) get extra links appended to the
 base64-encoded subscription response.
 """
 
@@ -57,19 +58,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         # Subscription response (base64) → append extra links
-        cdn_links = []
+        extra_links = []
         if CDN_LINK_ASYM:
-            cdn_links.append(CDN_LINK_ASYM)
+            extra_links.append(CDN_LINK_ASYM)
         if CDN_LINK:
-            cdn_links.append(CDN_LINK)
+            extra_links.append(CDN_LINK)
         if HYSTERIA_LINK:
-            cdn_links.append(HYSTERIA_LINK)
+            extra_links.append(HYSTERIA_LINK)
         if DIRECT_LINK:
-            cdn_links.append(DIRECT_LINK)
-        if cdn_links:
+            extra_links.append(DIRECT_LINK)
+        if extra_links:
             try:
                 decoded = base64.b64decode(body).decode("utf-8", errors="replace")
-                combined = decoded.rstrip("\n") + "\n" + "\n".join(cdn_links) + "\n"
+                combined = decoded.rstrip("\n") + "\n" + "\n".join(extra_links) + "\n"
                 body = base64.b64encode(combined.encode()).rstrip(b"=")
             except Exception:
                 pass  # non-base64 response, return as-is
