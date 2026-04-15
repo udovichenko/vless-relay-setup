@@ -207,10 +207,10 @@ main() {
     fi
     log_ok "3X-UI restarted with updated template"
 
-    # --- Step 5b: Update CDN links in sub-proxy if active ---
+    # --- Step 5b: Update extra links in sub-proxy if active ---
     local sub_proxy_service="/etc/systemd/system/sub-proxy.service"
     if [[ -f "$sub_proxy_service" ]] && systemctl is-active --quiet sub-proxy 2>/dev/null; then
-        log_info "Updating CDN links in sub-proxy..."
+        log_info "Updating links in sub-proxy..."
 
         # Update sub-proxy script from codebase
         local script_dir
@@ -227,47 +227,53 @@ main() {
             cdn_path=$(grep 'CDN_VLESS_LINK=' "$sub_proxy_service" | grep -oP '(?<=path=%%2F)[^&]+' | head -1) || true
         fi
 
-        if [[ -n "$cdn_domain" && -n "$cdn_path" ]]; then
+        # Read Hysteria params from existing service
+        local hy_port hy_port_end hy_obfs
+        hy_port=$(grep -oP '(?<=HYSTERIA_PORT=).+' "$sub_proxy_service") || true
+        hy_port_end=$(grep -oP '(?<=HYSTERIA_PORT_END=).+' "$sub_proxy_service") || true
+        hy_obfs=$(grep -oP '(?<=HYSTERIA_OBFS=).+' "$sub_proxy_service") || true
+
+        if [[ -n "$cdn_domain" && -n "$cdn_path" ]] || [[ -n "$hy_port" && -n "$hy_obfs" ]]; then
             # Read ExecStart from existing service file
             local exec_start
             exec_start=$(grep -oP '(?<=ExecStart=).+' "$sub_proxy_service") || true
 
-            # Symmetric XHTTP CDN link (exit params already extracted at lines 62-68)
-            local cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
+            # CDN links — only when CDN Fallback is configured
+            local cdn_vless_link="" cdn_vless_link_asym=""
+            if [[ -n "$cdn_domain" && -n "$cdn_path" ]]; then
+                # Symmetric XHTTP CDN link
+                cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
 
-            # Asymmetric CDN link with downloadSettings
-            local download_extra extra_encoded cdn_vless_link_asym
-            download_extra=$(jq -n -c \
-                --arg padding "100-1000" \
-                --arg addr "$exit_ip" \
-                --arg sni "$exit_sni" \
-                --arg pubkey "$exit_pubkey" \
-                --arg sid "$exit_short_id" \
-                --arg path "$exit_xhttp_path" \
-                '{
-                    xPaddingBytes: $padding,
-                    downloadSettings: {
-                        address: $addr, port: 443, network: "xhttp",
-                        security: "reality",
-                        realitySettings: {
-                            serverName: $sni, publicKey: $pubkey,
-                            shortId: $sid, fingerprint: "chrome"
-                        },
-                        xhttpSettings: { path: ("/"+$path), mode: "auto" }
-                    }
-                }')
-            extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
-            cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+                # Asymmetric CDN link with downloadSettings
+                local download_extra extra_encoded
+                download_extra=$(jq -n -c \
+                    --arg padding "100-1000" \
+                    --arg addr "$exit_ip" \
+                    --arg sni "$exit_sni" \
+                    --arg pubkey "$exit_pubkey" \
+                    --arg sid "$exit_short_id" \
+                    --arg path "$exit_xhttp_path" \
+                    '{
+                        xPaddingBytes: $padding,
+                        downloadSettings: {
+                            address: $addr, port: 443, network: "xhttp",
+                            security: "reality",
+                            realitySettings: {
+                                serverName: $sni, publicKey: $pubkey,
+                                shortId: $sid, fingerprint: "chrome"
+                            },
+                            xhttpSettings: { path: ("/"+$path), mode: "auto" }
+                        }
+                    }')
+                extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
+                cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+            fi
 
-            # Direct exit link (no relay hop)
+            # Direct exit link (no relay hop) — always available
             local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto#Direct%20Exit"
 
-            # Hysteria 2 link
+            # Hysteria 2 link — only when Hysteria is configured
             local hysteria_link=""
-            local hy_port hy_port_end hy_obfs
-            hy_port=$(grep -oP '(?<=HYSTERIA_PORT=).+' "$sub_proxy_service") || true
-            hy_port_end=$(grep -oP '(?<=HYSTERIA_PORT_END=).+' "$sub_proxy_service") || true
-            hy_obfs=$(grep -oP '(?<=HYSTERIA_OBFS=).+' "$sub_proxy_service") || true
             if [[ -n "$hy_port" && -n "$hy_obfs" ]]; then
                 hysteria_link="hysteria2://${exit_uuid}@${exit_ip}:${hy_port},${hy_port}-${hy_port_end}/?obfs=salamander&obfs-password=${hy_obfs}&sni=${exit_sni}&insecure=0#Hysteria%202"
                 log_info "Hysteria 2 link updated"
@@ -312,7 +318,7 @@ WantedBy=multi-user.target
 SVCEOF
             systemctl daemon-reload
             systemctl restart sub-proxy
-            log_ok "Sub-proxy updated with XHTTP CDN links"
+            log_ok "Sub-proxy updated"
         fi
     fi
 
