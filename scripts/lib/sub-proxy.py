@@ -8,8 +8,10 @@ Browser requests (Accept: text/html) are passed through as-is so the
 App requests (no Accept: text/html) get extra links appended to the
 base64-encoded subscription response.
 
-Shadowrocket config endpoint: ?conf=ru (split routing, RU sites direct)
-and ?conf=full (everything through VPN).
+Split routing:
+- Shadowrocket Module: ?module=ru endpoint (.sgmodule file)
+- Happ: routing HTTP header with deeplink (auto-import on subscription update)
+- HTML page: inject download buttons for Shadowrocket module
 """
 
 import http.server
@@ -27,64 +29,70 @@ HYSTERIA_LINK = os.environ.get("HYSTERIA_LINK", "")
 LISTEN_PORT = int(os.environ.get("SUB_PROXY_PORT", "18443"))
 CONF_DIR = os.environ.get("SR_CONF_DIR", "/etc/sub-proxy")
 
-SR_TEMPLATES = {}
+SR_MODULE = ""
+HAPP_ROUTING_HEADER = ""
 
 
-def load_sr_templates():
-    """Load Shadowrocket .conf templates from CONF_DIR at startup."""
-    for name in ("ru", "full"):
-        path = os.path.join(CONF_DIR, f"sr-conf-{name}.conf")
-        try:
-            with open(path) as f:
-                SR_TEMPLATES[name] = f.read()
-        except FileNotFoundError:
-            pass
+def load_templates():
+    """Load Shadowrocket module and Happ routing profile at startup."""
+    global SR_MODULE, HAPP_ROUTING_HEADER
+
+    # Shadowrocket module
+    module_path = os.path.join(CONF_DIR, "sr-module-ru.sgmodule")
+    try:
+        with open(module_path) as f:
+            SR_MODULE = f.read()
+    except FileNotFoundError:
+        pass
+
+    # Happ routing profile → deeplink header
+    happ_path = os.path.join(CONF_DIR, "happ-routing-ru.json")
+    try:
+        with open(happ_path) as f:
+            profile = f.read()
+        encoded = base64.b64encode(profile.encode()).decode()
+        HAPP_ROUTING_HEADER = f"happ://routing/onadd/{encoded}"
+    except FileNotFoundError:
+        pass
 
 
-CONF_SNIPPET = """\
+HTML_SNIPPET = """\
 <div style="margin:24px auto;max-width:600px;padding:16px 20px;background:#f0f4f8;
  border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
  text-align:center">
  <div style="font-size:15px;font-weight:600;margin-bottom:8px;color:#1a1a1a">
-  Split Routing / Раздельная маршрутизация</div>
+  Split Routing</div>
  <div style="font-size:13px;color:#666;margin-bottom:14px">
   RU-сервисы напрямую, остальное через VPN</div>
  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-  <a href="https://{host}{base}?conf=ru"
+  <a href="https://{host}{base}?module=ru"
    style="display:inline-block;padding:10px 20px;background:#007aff;color:#fff;
    border-radius:8px;text-decoration:none;font-size:14px;font-weight:500">
-   RU Direct</a>
-  <a href="https://{host}{base}?conf=full"
-   style="display:inline-block;padding:10px 20px;background:#34c759;color:#fff;
-   border-radius:8px;text-decoration:none;font-size:14px;font-weight:500">
-   Full VPN</a>
+   Shadowrocket Module</a>
  </div>
  <div style="font-size:11px;color:#999;margin-top:10px">
-  Shadowrocket: Config → + → Download from URL</div>
+  Shadowrocket: Config → Modules → добавить URL выше<br>
+  Happ: routing подключается автоматически через подписку</div>
 </div>
 """
 
 
-def _build_conf_snippet(host, base):
-    return CONF_SNIPPET.format(host=host, base=base).encode()
+def _build_html_snippet(host, base):
+    return HTML_SNIPPET.format(host=host, base=base).encode()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        # Shadowrocket config endpoints — served directly, no upstream call
         parsed = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(parsed.query)
-        conf_mode = query.get("conf", [None])[0]
 
-        if conf_mode in SR_TEMPLATES:
-            host = self.headers.get("Host", "localhost")
-            update_url = f"https://{host}{self.path}"
-            body = SR_TEMPLATES[conf_mode].format(update_url=update_url).encode()
-            filenames = {"ru": "split-ru.conf", "full": "full-vpn.conf"}
-            filename = filenames.get(conf_mode, f"{conf_mode}.conf")
+        # Shadowrocket Module endpoint
+        if query.get("module", [None])[0] == "ru" and SR_MODULE:
+            body = SR_MODULE.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Disposition",
+                             'attachment; filename="split-ru.sgmodule"')
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -110,17 +118,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(502, "Upstream unavailable")
             return
 
-        # Non-subscription content (HTML pages, CSS, JS, images) → pass through as-is
         is_html = b"<!DOCTYPE" in body[:100] or b"<html" in body[:100]
         is_sub = not is_browser and not is_html and "text/plain" in ct
 
+        # HTML page → inject split routing buttons
         if not is_sub:
-            # Inject split routing links into HTML subscription page
-            if is_html and SR_TEMPLATES:
+            if is_html and SR_MODULE:
                 host = self.headers.get("Host", "localhost")
                 base = parsed.path
-                snippet = _build_conf_snippet(host, base)
-                # Insert inside Vue app — before </a-layout-content> (visible area)
+                snippet = _build_html_snippet(host, base)
                 if b"</a-layout-content>" in body:
                     body = body.replace(
                         b"</a-layout-content>",
@@ -134,7 +140,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        # Subscription response (base64) → append extra links
+        # Subscription response (base64) → append extra links + Happ routing
         extra_links = []
         if CDN_LINK_ASYM:
             extra_links.append(CDN_LINK_ASYM)
@@ -150,10 +156,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 combined = decoded.rstrip("\n") + "\n" + "\n".join(extra_links) + "\n"
                 body = base64.b64encode(combined.encode()).rstrip(b"=")
             except Exception:
-                pass  # non-base64 response, return as-is
+                pass
 
         self.send_response(200)
         self.send_header("Content-Type", ct)
+        if HAPP_ROUTING_HEADER:
+            self.send_header("routing", HAPP_ROUTING_HEADER)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body if isinstance(body, bytes) else body.encode())
@@ -163,9 +171,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    load_sr_templates()
-    if SR_TEMPLATES:
-        print(f"sub-proxy: loaded Shadowrocket configs: {', '.join(SR_TEMPLATES)}")
+    load_templates()
+    loaded = []
+    if SR_MODULE:
+        loaded.append("Shadowrocket module")
+    if HAPP_ROUTING_HEADER:
+        loaded.append("Happ routing")
+    if loaded:
+        print(f"sub-proxy: loaded split routing: {', '.join(loaded)}")
     server = http.server.HTTPServer(("127.0.0.1", LISTEN_PORT), Handler)
     print(f"sub-proxy listening on 127.0.0.1:{LISTEN_PORT} -> {UPSTREAM}")
     sys.stdout.flush()

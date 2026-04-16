@@ -1,0 +1,32 @@
+{
+    "Name": "Split RU",
+    "GlobalProxy": "true",
+    "UseChunkFiles": "true",
+    "RemoteDNSType": "DoH",
+    "RemoteDNSDomain": "https://dns.adguard-dns.com/dns-query",
+    "RemoteDNSIP": "94.140.14.14",
+    "DomesticDNSType": "DoH",
+    "DomesticDNSDomain": "https://77.88.8.8/dns-query",
+    "DomesticDNSIP": "77.88.8.8",
+    "Geoipurl": "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat",
+    "Geositeurl": "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat",
+    "DnsHosts": {},
+    "RouteOrder": "block-proxy-direct",
+    "DirectSites": [
+        "geosite:private",
+        "geosite:category-ru"
+    ],
+    "DirectIp": [
+        "geoip:private",
+        "geoip:ru"
+    ],
+    "ProxySites": [
+        "geosite:youtube",
+        "geosite:telegram"
+    ],
+    "ProxyIp": [],
+    "BlockSites": [],
+    "BlockIp": [],
+    "DomainStrategy": "IPIfNonMatch",
+    "FakeDNS": "false"
+}
