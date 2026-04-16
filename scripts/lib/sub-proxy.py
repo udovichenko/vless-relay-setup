@@ -116,11 +116,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if not is_sub:
             # Inject split routing links into HTML subscription page
-            if is_html and SR_TEMPLATES and b"</body>" in body:
+            if is_html and SR_TEMPLATES:
                 host = self.headers.get("Host", "localhost")
                 base = parsed.path
                 snippet = _build_conf_snippet(host, base)
-                body = body.replace(b"</body>", snippet + b"</body>")
+                # Insert after Vue </a-layout> (before scripts), fallback to </body>
+                if b"</a-layout>" in body:
+                    body = body.replace(b"</a-layout>", b"</a-layout>" + snippet, 1)
+                elif b"</body>" in body:
+                    body = body.replace(b"</body>", snippet + b"</body>", 1)
             self.send_response(200)
             self.send_header("Content-Type", ct)
             self.send_header("Content-Length", str(len(body)))
