@@ -41,6 +41,34 @@ def load_sr_templates():
             pass
 
 
+CONF_SNIPPET = """\
+<div style="margin:24px auto;max-width:600px;padding:16px 20px;background:#f0f4f8;
+ border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+ text-align:center">
+ <div style="font-size:15px;font-weight:600;margin-bottom:8px;color:#1a1a1a">
+  Split Routing / Раздельная маршрутизация</div>
+ <div style="font-size:13px;color:#666;margin-bottom:14px">
+  RU-сервисы напрямую, остальное через VPN</div>
+ <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+  <a href="https://{host}{base}?conf=ru"
+   style="display:inline-block;padding:10px 20px;background:#007aff;color:#fff;
+   border-radius:8px;text-decoration:none;font-size:14px;font-weight:500">
+   RU Direct</a>
+  <a href="https://{host}{base}?conf=full"
+   style="display:inline-block;padding:10px 20px;background:#34c759;color:#fff;
+   border-radius:8px;text-decoration:none;font-size:14px;font-weight:500">
+   Full VPN</a>
+ </div>
+ <div style="font-size:11px;color:#999;margin-top:10px">
+  Shadowrocket: Config → + → Download from URL</div>
+</div>
+"""
+
+
+def _build_conf_snippet(host, base):
+    return CONF_SNIPPET.format(host=host, base=base).encode()
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         # Shadowrocket config endpoints — served directly, no upstream call
@@ -87,6 +115,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         is_sub = not is_browser and not is_html and "text/plain" in ct
 
         if not is_sub:
+            # Inject split routing links into HTML subscription page
+            if is_html and SR_TEMPLATES and b"</body>" in body:
+                host = self.headers.get("Host", "localhost")
+                base = parsed.path
+                snippet = _build_conf_snippet(host, base)
+                body = body.replace(b"</body>", snippet + b"</body>")
             self.send_response(200)
             self.send_header("Content-Type", ct)
             self.send_header("Content-Length", str(len(body)))
