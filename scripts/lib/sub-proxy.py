@@ -65,20 +65,25 @@ HTML_SNIPPET = """\
  <div style="font-size:13px;color:#666;margin-bottom:14px">
   RU-сервисы напрямую, остальное через VPN</div>
  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-  <a href="https://{host}{base}?module=ru"
+  <a href="shadowrocket://install?module=https%3A%2F%2F{host}{base_encoded}%3Fmodule%3Dru"
    style="display:inline-block;padding:10px 20px;background:#007aff;color:#fff;
    border-radius:8px;text-decoration:none;font-size:14px;font-weight:500">
-   Shadowrocket Module</a>
+   Shadowrocket</a>
+  <a href="https://{host}{base}?module=ru"
+   style="display:inline-block;padding:10px 20px;background:#8e8e93;color:#fff;
+   border-radius:8px;text-decoration:none;font-size:12px;font-weight:500">
+   Скачать .sgmodule</a>
  </div>
  <div style="font-size:11px;color:#999;margin-top:10px">
-  Shadowrocket: Config → Modules → добавить URL выше<br>
   Happ: routing подключается автоматически через подписку</div>
 </div>
 """
 
 
 def _build_html_snippet(host, base):
-    return HTML_SNIPPET.format(host=host, base=base).encode()
+    base_encoded = urllib.parse.quote(base, safe="")
+    return HTML_SNIPPET.format(
+        host=host, base=base, base_encoded=base_encoded).encode()
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
