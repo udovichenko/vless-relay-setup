@@ -52,8 +52,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             host = self.headers.get("Host", "localhost")
             update_url = f"https://{host}{self.path}"
             body = SR_TEMPLATES[conf_mode].format(update_url=update_url).encode()
+            filenames = {"ru": "split-ru.conf", "full": "full-vpn.conf"}
+            filename = filenames.get(conf_mode, f"{conf_mode}.conf")
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
