@@ -263,10 +263,13 @@ setup_sub_proxy() {
 
     log_info "Setting up subscription proxy..."
 
-    # Install the proxy script
+    # Install the proxy script and config templates
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     install -m 0755 "$script_dir/sub-proxy.py" /usr/local/bin/sub-proxy.py
+    mkdir -p /etc/sub-proxy
+    install -m 0644 "$script_dir/templates/sr-conf-ru.conf" /etc/sub-proxy/sr-conf-ru.conf
+    install -m 0644 "$script_dir/templates/sr-conf-full.conf" /etc/sub-proxy/sr-conf-full.conf
 
     # Escape % for systemd (% is a specifier prefix in unit files)
     local escaped_link="${cdn_vless_link//%/%%}"
@@ -318,6 +321,7 @@ uninstall_sub_proxy() {
     systemctl disable sub-proxy 2>/dev/null || true
     rm -f /etc/systemd/system/sub-proxy.service 2>/dev/null || true
     rm -f /usr/local/bin/sub-proxy.py 2>/dev/null || true
+    rm -rf /etc/sub-proxy 2>/dev/null || true
     systemctl daemon-reload 2>/dev/null || true
 }
 

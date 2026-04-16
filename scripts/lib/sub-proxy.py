@@ -7,10 +7,14 @@ Browser requests (Accept: text/html) are passed through as-is so the
 
 App requests (no Accept: text/html) get extra links appended to the
 base64-encoded subscription response.
+
+Shadowrocket config endpoint: ?conf=ru (split routing, RU sites direct)
+and ?conf=full (everything through VPN).
 """
 
 import http.server
 import urllib.request
+import urllib.parse
 import base64
 import os
 import sys
@@ -21,10 +25,40 @@ CDN_LINK_ASYM = os.environ.get("CDN_VLESS_LINK_ASYM", "")
 DIRECT_LINK = os.environ.get("DIRECT_VLESS_LINK", "")
 HYSTERIA_LINK = os.environ.get("HYSTERIA_LINK", "")
 LISTEN_PORT = int(os.environ.get("SUB_PROXY_PORT", "18443"))
+CONF_DIR = os.environ.get("SR_CONF_DIR", "/etc/sub-proxy")
+
+SR_TEMPLATES = {}
+
+
+def load_sr_templates():
+    """Load Shadowrocket .conf templates from CONF_DIR at startup."""
+    for name in ("ru", "full"):
+        path = os.path.join(CONF_DIR, f"sr-conf-{name}.conf")
+        try:
+            with open(path) as f:
+                SR_TEMPLATES[name] = f.read()
+        except FileNotFoundError:
+            pass
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        # Shadowrocket config endpoints — served directly, no upstream call
+        parsed = urllib.parse.urlparse(self.path)
+        query = urllib.parse.parse_qs(parsed.query)
+        conf_mode = query.get("conf", [None])[0]
+
+        if conf_mode in SR_TEMPLATES:
+            host = self.headers.get("Host", "localhost")
+            update_url = f"https://{host}{self.path}"
+            body = SR_TEMPLATES[conf_mode].format(update_url=update_url).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         accept = self.headers.get("Accept", "")
         is_browser = "text/html" in accept
 
@@ -86,6 +120,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    load_sr_templates()
+    if SR_TEMPLATES:
+        print(f"sub-proxy: loaded Shadowrocket configs: {', '.join(SR_TEMPLATES)}")
     server = http.server.HTTPServer(("127.0.0.1", LISTEN_PORT), Handler)
     print(f"sub-proxy listening on 127.0.0.1:{LISTEN_PORT} -> {UPSTREAM}")
     sys.stdout.flush()

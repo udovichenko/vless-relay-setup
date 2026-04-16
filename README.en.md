@@ -55,6 +55,8 @@ Subscription (priority order):
   ⑤ Direct Exit           fastest, but less reliable
 ```
 
+> Split routing is configured in the client app and works with any of these channels.
+
 ### Hysteria 2 (optional)
 
 UDP channel using the Hysteria 2 protocol. Runs over QUIC with Salamander obfuscation (traffic is indistinguishable from random data) and port hopping (client switches between ports every few seconds). Resilient to UDP blocking — no fixed port and no identifiable QUIC headers.
@@ -67,6 +69,20 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
 
 ![DNS filtering](./docs/dns-filtering.svg)
 
+### Split Routing
+
+Some regional services (banking, government portals, local marketplaces) may not work correctly when accessed via VPN with a foreign IP. Split routing solves this — regional traffic goes direct, everything else through VPN.
+
+```
+Subscription + split routing:
+  YouTube, Instagram, Discord     → through VPN
+  Regional banking & services     → direct (home IP)
+```
+
+Configuration depends on the client app — some offer presets, others support remote config. For Shadowrocket: sub-proxy serves ready-made configs at the subscription URL with `?conf=ru` (regional traffic direct) or `?conf=full` (everything through VPN).
+
+Split routing requires no additional server configuration — it is a client-side feature.
+
 ### Features
 
 - **VLESS + XTLS-Reality + XHTTP** — end-to-end TLS 1.3 encryption with XHTTP transport on both hops
@@ -75,6 +91,7 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
 - **Hysteria 2 (UDP)** — fallback channel with Salamander obfuscation and port hopping
 - **3X-UI panel** — web interface for user management, traffic limits, and monitoring
 - **Subscriptions** — automatic configuration updates on client devices
+- **Split Routing** — region-based traffic routing: local services go direct, everything else through VPN. Ready-made Shadowrocket configs (`?conf=ru`)
 - **SSH hardening + fail2ban + UFW** — automated server security configuration
 - **Backup / Rollback** — automatic backups on every update with rollback on failure
 
@@ -207,12 +224,45 @@ Open the relay panel: `https://<relay-ip>:<port>/<path>/`
 
 Share the subscription link with the user. In the app: **Subscriptions → Add → Update → Connect**.
 
-| Platform | App | Download |
-|----------|-----|----------|
-| iOS | Streisand | [App Store](https://apps.apple.com/app/streisand/id6450534064) |
-| Android | v2rayNG | [GitHub](https://github.com/2dust/v2rayNG) |
-| Windows | v2rayN | [GitHub](https://github.com/2dust/v2rayN) |
-| macOS | V2BOX | [App Store](https://apps.apple.com/app/v2box-v2ray-client/id6446814690) |
+| Platform | App | Download | Split routing |
+|----------|-----|----------|---------------|
+| Android | v2rayNG | [GitHub](https://github.com/2dust/v2rayNG) | Settings → Routing → preset Russia |
+| Android | Happ | [GitHub](https://github.com/Happ-proxy/happ-android) | Routing → add RU profile |
+| iOS | Shadowrocket | [App Store](https://apps.apple.com/app/shadowrocket/id932747118) | Config → Remote → `?conf=ru` |
+| iOS | Happ | [App Store](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215) | Routing → add RU profile |
+| iOS | Streisand | [App Store](https://apps.apple.com/app/streisand/id6450534064) | Routing rules in UI |
+| Windows | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
+| macOS | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
+
+### Step 5. Split Routing (optional)
+
+To ensure regional services (banking, government portals, marketplaces) work correctly, configure split routing in your client app:
+
+**v2rayN** (Windows / macOS / Linux):
+1. Settings → Regional presets → Russia
+2. Select "All, except RU"
+3. Done — regional sites go direct, everything else through VPN
+
+**v2rayNG** (Android):
+1. Settings → Routing Settings
+2. Select the Russia preset or import rules
+3. Done
+
+**Happ** (Android / iOS / desktop):
+1. Open the Routing section (⊙ menu in the top right corner)
+2. Enable "Use routing"
+3. Add a profile — manually or via deeplink from [roscomvpn-routing](https://github.com/hydraponique/roscomvpn-routing)
+
+**Shadowrocket** (iOS):
+1. Add the subscription as usual (servers)
+2. Config → tap **+** → Remote Files
+3. Paste the subscription URL with `?conf=ru` parameter, e.g.: `https://sub.example.com/sub/path/?conf=ru`
+4. Download → select this config → Global Routing: Config
+5. To switch to "everything through VPN" — replace `?conf=ru` with `?conf=full`
+
+**Streisand** (iOS):
+1. Settings → Routing → add rules manually
+2. Add: `GEOIP,RU,DIRECT` and `DOMAIN-SUFFIX,ru,DIRECT`
 
 ## Project Structure
 
