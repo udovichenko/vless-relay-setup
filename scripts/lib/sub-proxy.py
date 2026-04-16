@@ -120,9 +120,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 host = self.headers.get("Host", "localhost")
                 base = parsed.path
                 snippet = _build_conf_snippet(host, base)
-                # Insert after Vue </a-layout> (before scripts), fallback to </body>
-                if b"</a-layout>" in body:
-                    body = body.replace(b"</a-layout>", b"</a-layout>" + snippet, 1)
+                # Insert inside Vue app — before </a-layout-content> (visible area)
+                if b"</a-layout-content>" in body:
+                    body = body.replace(
+                        b"</a-layout-content>",
+                        snippet + b"</a-layout-content>", 1)
                 elif b"</body>" in body:
                     body = body.replace(b"</body>", snippet + b"</body>", 1)
             self.send_response(200)
