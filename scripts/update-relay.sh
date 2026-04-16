@@ -11,11 +11,16 @@ source "$SCRIPT_DIR/lib/caddy.sh"
 
 main() {
     local upgrade=false skip_ssh=false
-    for arg in "$@"; do
-        case "$arg" in
+    local arg_hy_port="" arg_hy_port_end="" arg_hy_obfs=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
             --upgrade) upgrade=true ;;
             --skip-ssh) skip_ssh=true ;;
+            --hysteria-port) arg_hy_port="$2"; shift ;;
+            --hysteria-port-end) arg_hy_port_end="$2"; shift ;;
+            --hysteria-obfs) arg_hy_obfs="$2"; shift ;;
         esac
+        shift
     done
 
     echo "==========================================="
@@ -209,13 +214,16 @@ main() {
 
     # --- Step 5b: Update extra links in sub-proxy if active ---
     local sub_proxy_service="/etc/systemd/system/sub-proxy.service"
-    if [[ -f "$sub_proxy_service" ]] && systemctl is-active --quiet sub-proxy 2>/dev/null; then
+    if [[ -f "$sub_proxy_service" ]]; then
         log_info "Updating links in sub-proxy..."
 
-        # Update sub-proxy script from codebase
+        # Update sub-proxy script and config templates from codebase
         local script_dir
         script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         install -m 0755 "$script_dir/lib/sub-proxy.py" /usr/local/bin/sub-proxy.py
+        mkdir -p /etc/sub-proxy
+        install -m 0644 "$script_dir/lib/templates/sr-conf-ru.conf" /etc/sub-proxy/sr-conf-ru.conf 2>/dev/null || true
+        install -m 0644 "$script_dir/lib/templates/sr-conf-full.conf" /etc/sub-proxy/sr-conf-full.conf 2>/dev/null || true
 
         # Read CDN params — prefer dedicated env vars, fall back to old URL parsing
         local cdn_domain cdn_path
@@ -227,11 +235,21 @@ main() {
             cdn_path=$(grep 'CDN_VLESS_LINK=' "$sub_proxy_service" | grep -oP '(?<=path=%%2F)[^&]+' | head -1) || true
         fi
 
-        # Read Hysteria params from existing service
+        # Read Hysteria params from existing service, then override with CLI args
         local hy_port hy_port_end hy_obfs
         hy_port=$(grep -oP '(?<=HYSTERIA_PORT=).+' "$sub_proxy_service") || true
         hy_port_end=$(grep -oP '(?<=HYSTERIA_PORT_END=).+' "$sub_proxy_service") || true
         hy_obfs=$(grep -oP '(?<=HYSTERIA_OBFS=).+' "$sub_proxy_service") || true
+
+        # CLI args override service file values (for adding/updating Hysteria)
+        [[ -n "$arg_hy_port" ]] && hy_port="$arg_hy_port"
+        [[ -n "$arg_hy_port_end" ]] && hy_port_end="$arg_hy_port_end"
+        [[ -n "$arg_hy_obfs" ]] && hy_obfs="$arg_hy_obfs"
+
+        # Default port_end if only port provided
+        if [[ -n "$hy_port" && -z "$hy_port_end" ]]; then
+            hy_port_end=$((hy_port + 1000))
+        fi
 
         if [[ -n "$cdn_domain" && -n "$cdn_path" ]] || [[ -n "$hy_port" && -n "$hy_obfs" ]]; then
             # Read ExecStart from existing service file
@@ -365,6 +383,9 @@ SVCEOF
     echo "  Clients and subscriptions preserved"
     if [[ "$is_cdn" == true ]]; then
         echo "  CDN fallback inbound preserved"
+    fi
+    if [[ -n "$arg_hy_port" ]]; then
+        echo "  Hysteria 2 link added to subscriptions"
     fi
     echo ""
 }

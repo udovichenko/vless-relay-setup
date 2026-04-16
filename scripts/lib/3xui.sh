@@ -305,6 +305,9 @@ create_3xui_relay_inbound() {
     local s_stream="${stream_settings//\'/\'\'}"
     local s_sniffing="${sniffing//\'/\'\'}"
 
+    # Clean up any existing inbound with the same tag (e.g. --force reinstall)
+    sqlite3 "$XUI_DB" "DELETE FROM inbounds WHERE tag='inbound-443';" || true
+
     sqlite3 "$XUI_DB" "INSERT INTO inbounds (
         user_id, up, down, total, remark, enable, expiry_time,
         listen, port, protocol, settings, stream_settings,

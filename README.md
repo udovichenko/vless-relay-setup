@@ -286,6 +286,17 @@ sudo ./scripts/setup.sh update-relay
 
 При CDN Fallback `update-relay` автоматически синхронизирует CDN-ссылку с текущим exit UUID. Если UUID exit-сервера изменился — достаточно запустить `update-relay`, и подписки обновятся. Пользователям нужно только нажать "Обновить" в приложении.
 
+Если Hysteria 2 был добавлен на exit после первоначальной настройки relay, передайте параметры через `update-relay`:
+
+```bash
+sudo ./scripts/setup.sh update-relay \
+  --hysteria-port 34821 \
+  --hysteria-port-end 35821 \
+  --hysteria-obfs mypassword
+```
+
+Значения — из `exit-server-info.txt`. `--hysteria-port-end` можно не указывать (по умолчанию port + 1000).
+
 Для обновления бинарников (XRAY, 3X-UI, Caddy) добавьте `--upgrade`:
 
 ```bash
@@ -323,6 +334,9 @@ x-ui log
 | `--skip-ssh` | setup, update | Не менять конфигурацию SSH |
 | `--upgrade` | update | Обновить бинарники (XRAY, 3X-UI, Caddy) |
 | `--purge-certs` | uninstall | Удалить SSL-сертификаты и acme.sh |
+| `--hysteria-port` | update-relay | Порт Hysteria 2 на exit-сервере |
+| `--hysteria-port-end` | update-relay | Конец диапазона портов (по умолчанию port + 1000) |
+| `--hysteria-obfs` | update-relay | Пароль обфускации Salamander |
 
 ## Безопасность
 
