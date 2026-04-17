@@ -160,6 +160,10 @@ main() {
         log_ok "Inbound sniffing patched (routeOnly: true)"
     fi
 
+    # Precompute XHTTP extra block (xmux + padding + flow control) — shared helper.
+    local extra_json
+    extra_json=$(xhttp_extra_json)
+
     # Migrate TCP inbound to XHTTP if still on TCP
     if [[ "$current_network" != "xhttp" ]]; then
         local relay_xhttp_path
@@ -169,12 +173,16 @@ main() {
         local current_stream patched_stream
         current_stream=$(sqlite3 "$XUI_DB" \
             "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';")
+        # Write xhttpSettings complete with extra in a single pass —
+        # prevents fragility if the post-migration patch block is skipped/reordered.
         patched_stream=$(echo "$current_stream" | jq -c \
             --arg relay_path "$relay_xhttp_path" \
+            --argjson extra "$extra_json" \
             '.network = "xhttp"
             | .xhttpSettings = {
                 path: ("/"+$relay_path),
-                mode: "auto"
+                mode: "auto",
+                extra: $extra
             }
             | del(.tcpSettings)')
         local s_stream="${patched_stream//\'/\'\'}"
@@ -192,6 +200,27 @@ main() {
             "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-443';"
 
         log_ok "Relay inbound migrated from TCP to XHTTP"
+    fi
+
+    # Idempotent patch of XHTTP extra on existing installs (already on XHTTP before this run).
+    # Ensures current recommended values are applied on every update — needed for
+    # TSPU TLS-policing resistance on client→relay leg (XTLS issue #5332).
+    local current_inbound_stream updated_inbound_stream
+    current_inbound_stream=$(sqlite3 "$XUI_DB" \
+        "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';") || true
+    if [[ -n "$current_inbound_stream" && \
+          "$(echo "$current_inbound_stream" | jq -r '.network')" == "xhttp" ]]; then
+        updated_inbound_stream=$(echo "$current_inbound_stream" | jq -c \
+            --argjson extra "$extra_json" \
+            '.xhttpSettings.extra = $extra')
+        if [[ -z "$updated_inbound_stream" ]]; then
+            log_error "jq failed to patch XHTTP extra on inbound (input malformed?)"
+            exit 1
+        fi
+        local s_inbound_stream="${updated_inbound_stream//\'/\'\'}"
+        sqlite3 "$XUI_DB" \
+            "UPDATE inbounds SET stream_settings='${s_inbound_stream}' WHERE tag='inbound-443';"
+        log_ok "XHTTP inbound extra block patched (xmux + padding)"
     fi
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
@@ -262,7 +291,11 @@ main() {
                 # Symmetric XHTTP CDN link
                 cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
 
-                # Asymmetric CDN link with downloadSettings
+                # Asymmetric CDN link with downloadSettings.
+                # Upload leg (client→CF→exit): conservative — only padding at top level
+                # (Cloudflare doesn't handle aggressive mux well).
+                # Download leg (client→exit direct via Reality): full extra — same threat
+                # model as direct/relay, same TSPU TLS-policing resistance needed.
                 local download_extra extra_encoded
                 download_extra=$(jq -n -c \
                     --arg padding "100-1000" \
@@ -271,6 +304,7 @@ main() {
                     --arg pubkey "$exit_pubkey" \
                     --arg sid "$exit_short_id" \
                     --arg path "$exit_xhttp_path" \
+                    --argjson extra "$extra_json" \
                     '{
                         xPaddingBytes: $padding,
                         downloadSettings: {
@@ -280,15 +314,22 @@ main() {
                                 serverName: $sni, publicKey: $pubkey,
                                 shortId: $sid, fingerprint: "chrome"
                             },
-                            xhttpSettings: { path: ("/"+$path), mode: "auto" }
+                            xhttpSettings: {
+                                path: ("/"+$path),
+                                mode: "auto",
+                                extra: $extra
+                            }
                         }
                     }')
                 extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
                 cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
             fi
 
-            # Direct exit link (no relay hop) — always available
-            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto#Direct%20Exit"
+            # Direct exit link (no relay hop) — always available.
+            # Carries same extra block as relay inbound (XHTTP+Reality, same TSPU threat).
+            local direct_extra_encoded
+            direct_extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$extra_json")
+            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto&extra=${direct_extra_encoded}#Direct%20Exit"
 
             # Hysteria 2 link — only when Hysteria is configured
             local hysteria_link=""
