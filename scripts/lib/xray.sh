@@ -32,6 +32,12 @@ configure_xray_exit() {
 
     log_info "Configuring XRAY as exit server..."
 
+    # XHTTP extra block from shared helper. Server-side fields apply (padding,
+    # scMaxEachPostBytes, scMaxBufferedPosts). Client-side fields (xmux,
+    # scMinPostsIntervalMs) are ignored at runtime but kept for config parity.
+    local extra_json
+    extra_json=$(xhttp_extra_json)
+
     cat > /usr/local/etc/xray/config.json << XRAYEOF
 {
     "log": {
@@ -65,11 +71,7 @@ configure_xray_exit() {
                 "xhttpSettings": {
                     "mode": "auto",
                     "path": "/${xhttp_path}",
-                    "extra": {
-                        "xPaddingBytes": "100-1000",
-                        "scMaxEachPostBytes": 262144,
-                        "scMaxBufferedPosts": 10
-                    }
+                    "extra": ${extra_json}
                 },
                 "security": "reality",
                 "realitySettings": {
@@ -118,10 +120,12 @@ XRAYEOF
 
     if [[ -n "$cdn_port" && -n "$cdn_path" ]]; then
         log_info "Adding CDN XHTTP inbound on 127.0.0.1:${cdn_port}..."
-        local tmp_config
+        local tmp_config cdn_extra_json
+        cdn_extra_json=$(xhttp_extra_json)
         if ! tmp_config=$(jq \
             --argjson cdn_port "$cdn_port" \
             --arg cdn_path "$cdn_path" \
+            --argjson extra "$cdn_extra_json" \
             '.inbounds += [{
                 tag: "vless-cdn-in",
                 listen: "127.0.0.1",
@@ -136,11 +140,7 @@ XRAYEOF
                     xhttpSettings: {
                         mode: "packet-up",
                         path: ("/"+$cdn_path),
-                        extra: {
-                            xPaddingBytes: "100-1000",
-                            scMaxEachPostBytes: 262144,
-                            scMaxBufferedPosts: 10
-                        }
+                        extra: $extra
                     }
                 },
                 sniffing: {

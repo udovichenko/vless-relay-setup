@@ -6,30 +6,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 XUI_BIN="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/x-ui"
 XUI_DB="/etc/x-ui/x-ui.db"
 
-# Single source of truth for XHTTP extra params (padding + mux + flow control).
-# Values track XTLS upstream recommendations (discussion #4113, PR #4163):
-#   - scMinPostsIntervalMs as range "10-50" (randomized) — avoids timing fingerprint
-#   - scMaxEachPostBytes 1000000 (1MB) — upstream default, good for non-CDN
-#   - scMaxBufferedPosts 30 — upstream default
-#   - xmux.hMaxRequestTimes "600-900" — prevents hitting Nginx/CDN 1000-req cap
-# Note: xmux and scMinPostsIntervalMs are CLIENT-SIDE only. On inbound they serve
-# as metadata for subscription URL generation (3X-UI emits them in VLESS ?extra=),
-# not server runtime behavior. xPaddingBytes / scMaxEachPostBytes / scMaxBufferedPosts
-# are genuine server-side settings.
-xhttp_extra_json() {
-    jq -n -c '{
-        xPaddingBytes: "100-1000",
-        scMaxEachPostBytes: 1000000,
-        scMaxBufferedPosts: 30,
-        scMinPostsIntervalMs: "10-50",
-        xmux: {
-            maxConcurrency: "16-32",
-            maxConnections: 0,
-            cMaxReuseTimes: "64-128",
-            hMaxRequestTimes: "600-900"
-        }
-    }'
-}
+# xhttp_extra_json() shared helper now lives in common.sh so xray.sh (exit)
+# and 3xui.sh (relay) use the same values. This prevents mismatch between
+# relay outbound scMaxEachPostBytes and exit inbound cap.
 
 install_3xui() {
     local skip_acme_port="${1:-false}"

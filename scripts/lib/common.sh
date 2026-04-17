@@ -125,6 +125,35 @@ generate_random_path() {
     openssl rand -hex 8
 }
 
+# Single source of truth for XHTTP extra params (padding + mux + flow control).
+# Values track XTLS upstream recommendations (discussion #4113, PR #4163):
+#   - scMinPostsIntervalMs as range "10-50" (randomized) — avoids timing fingerprint
+#   - scMaxEachPostBytes 1000000 (1MB) — upstream default
+#   - scMaxBufferedPosts 30 — upstream default
+#   - xmux.hMaxRequestTimes "600-900" — prevents hitting Nginx/CDN 1000-req cap
+# Used on BOTH sides:
+#   - Client-side (relay→exit outbound, subscription VLESS URLs): full block applies;
+#     xmux and scMinPostsIntervalMs drive client behavior.
+#   - Server-side (relay inbound, exit inbound): xmux and scMinPostsIntervalMs are
+#     ignored at runtime but travel in subscription URL as metadata. xPaddingBytes,
+#     scMaxEachPostBytes, scMaxBufferedPosts are enforced by the server.
+# NOTE: scMaxEachPostBytes MUST match between relay outbound (client perspective)
+# and exit inbound (server cap) — otherwise large POSTs get rejected.
+xhttp_extra_json() {
+    jq -n -c '{
+        xPaddingBytes: "100-1000",
+        scMaxEachPostBytes: 1000000,
+        scMaxBufferedPosts: 30,
+        scMinPostsIntervalMs: "10-50",
+        xmux: {
+            maxConcurrency: "16-32",
+            maxConnections: 0,
+            cMaxReuseTimes: "64-128",
+            hMaxRequestTimes: "600-900"
+        }
+    }'
+}
+
 install_dependencies() {
     log_info "Installing dependencies..."
     apt-get update -qq
