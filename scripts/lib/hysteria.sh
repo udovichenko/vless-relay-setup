@@ -33,10 +33,26 @@ configure_hysteria() {
     # Copy Caddy's Let's Encrypt certs to Hysteria cert dir
     # Hysteria runs as 'hysteria' user, Caddy certs are root-owned
     local caddy_cert_dir="/root/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${selfsteal_domain}"
-    if [[ ! -f "${caddy_cert_dir}/${selfsteal_domain}.crt" ]]; then
-        log_error "Caddy cert not found for ${selfsteal_domain}"
-        log_error "Expected: ${caddy_cert_dir}/${selfsteal_domain}.crt"
-        exit 1
+    local cert_path="${caddy_cert_dir}/${selfsteal_domain}.crt"
+
+    # Caddy issues the cert asynchronously after start (ACME HTTP-01).
+    # On a freshly started Caddy the cert may not be on disk yet by the time
+    # we get here, so wait up to 90s before failing with a clear message.
+    if [[ ! -f "$cert_path" ]]; then
+        log_info "Waiting for Caddy ACME certificate for ${selfsteal_domain}..."
+        local elapsed=0
+        local timeout=90
+        while [[ ! -f "$cert_path" ]]; do
+            if [[ $elapsed -ge $timeout ]]; then
+                log_error "Caddy cert not issued for ${selfsteal_domain} within ${timeout}s"
+                log_error "Expected: $cert_path"
+                log_error "ACME likely failed — check: journalctl -u caddy"
+                exit 1
+            fi
+            sleep 1
+            elapsed=$((elapsed + 1))
+        done
+        log_ok "Caddy cert ready (waited ${elapsed}s)"
     fi
 
     mkdir -p "$HYSTERIA_CERT_DIR"
