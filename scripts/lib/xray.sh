@@ -29,6 +29,7 @@ configure_xray_exit() {
     local xver="${8:-0}"
     local cdn_port="${9:-}"
     local cdn_path="${10:-}"
+    local dns_mode="${11:-adguard}"
 
     log_info "Configuring XRAY as exit server..."
 
@@ -38,6 +39,22 @@ configure_xray_exit() {
     local extra_json
     extra_json=$(xhttp_extra_json)
 
+    local dns_servers_json
+    case "$dns_mode" in
+        adguard)
+            dns_servers_json='"94.140.14.14", "94.140.15.15", "1.1.1.1"'
+            log_info "DNS: AdGuard (ad/tracker filtering)"
+            ;;
+        default)
+            dns_servers_json='"1.1.1.1", "8.8.8.8"'
+            log_info "DNS: Cloudflare + Google (no filtering)"
+            ;;
+        *)
+            log_error "Unknown dns_mode: $dns_mode (expected: adguard|default)"
+            exit 1
+            ;;
+    esac
+
     cat > /usr/local/etc/xray/config.json << XRAYEOF
 {
     "log": {
@@ -46,11 +63,7 @@ configure_xray_exit() {
         "error": "/var/log/xray/error.log"
     },
     "dns": {
-        "servers": [
-            "94.140.14.14",
-            "94.140.15.15",
-            "1.1.1.1"
-        ]
+        "servers": [${dns_servers_json}]
     },
     "inbounds": [
         {

@@ -84,10 +84,16 @@ main() {
         exit 1
     fi
 
+    local dns_mode="default"
+    if jq -e '.dns.servers[] | select(. == "94.140.14.14")' "$XRAY_CONFIG" > /dev/null 2>&1; then
+        dns_mode="adguard"
+    fi
+
     log_ok "Current config read successfully"
-    log_info "  UUID:  $uuid"
-    log_info "  Port:  $listen_port"
-    log_info "  SNI:   $server_name"
+    log_info "  UUID:     $uuid"
+    log_info "  Port:     $listen_port"
+    log_info "  SNI:      $server_name"
+    log_info "  DNS mode: $dns_mode"
 
     # Read panel port from 3X-UI DB (for UFW and verification)
     local panel_port=""
@@ -133,7 +139,7 @@ main() {
 
     configure_xray_exit "$listen_port" "$uuid" "$private_key" \
         "$short_id" "$dest" "$server_name" "$xhttp_path" "$xver" \
-        "$cdn_port" "$cdn_path"
+        "$cdn_port" "$cdn_path" "$dns_mode"
 
     if ! restart_xray; then
         log_warn "Restoring previous config..."

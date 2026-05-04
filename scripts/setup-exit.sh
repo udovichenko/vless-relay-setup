@@ -88,6 +88,12 @@ main() {
         fi
     fi
 
+    local dns_mode="adguard" adguard_choice
+    prompt_input "Enable AdGuard DNS filtering on exit (blocks ads/trackers)? [Y/n]" adguard_choice "Y"
+    case "$adguard_choice" in
+        n|N|no|No|NO) dns_mode="default" ;;
+    esac
+
     local hysteria_port="" hysteria_port_end="" hysteria_obfs=""
     if [[ -n "$selfsteal_domain" ]]; then
         prompt_input "Hysteria 2 UDP port (Enter to skip)" hysteria_port ""
@@ -141,14 +147,14 @@ main() {
 
         configure_xray_exit 443 "$exit_uuid" "$REALITY_PRIVATE_KEY" \
             "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
-            "$xhttp_path" 1 "$cdn_port" "$cdn_path"
+            "$xhttp_path" 1 "$cdn_port" "$cdn_path" "$dns_mode"
     else
         # Auto mode: select best external site
         setup_reality
 
         configure_xray_exit 443 "$exit_uuid" "$REALITY_PRIVATE_KEY" \
             "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
-            "$xhttp_path" 0
+            "$xhttp_path" 0 "" "" "$dns_mode"
     fi
 
     restart_xray
