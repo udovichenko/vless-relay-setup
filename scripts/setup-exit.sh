@@ -91,7 +91,7 @@ main() {
     local dns_mode="adguard" adguard_choice
     prompt_input "Enable AdGuard DNS filtering on exit (blocks ads/trackers)? [Y/n]" adguard_choice "Y"
     case "$adguard_choice" in
-        n|N|no|No|NO) dns_mode="default" ;;
+        [Nn]*) dns_mode="default" ;;
     esac
 
     local hysteria_port="" hysteria_port_end="" hysteria_obfs=""
@@ -296,5 +296,6 @@ EOF
 }
 
 LOG_FILE="/var/log/vpn-setup-$(basename "$0" .sh)-$(date +%Y%m%d-%H%M%S).log"
+install -m 0600 /dev/null "$LOG_FILE"
 main "$@" 2>&1 | tee "$LOG_FILE"
 exit "${PIPESTATUS[0]}"

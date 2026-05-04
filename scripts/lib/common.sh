@@ -117,7 +117,11 @@ generate_random_path() {
 }
 
 generate_admin_pass() {
-    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16
+    # od reads exactly 12 bytes and exits — no SIGPIPE on the writer (unlike
+    # `tr </dev/urandom | head -c N`, which exits 141 under pipefail).
+    # od + tr are in coreutils on every base Ubuntu — no openssl dependency,
+    # so this works even before install_dependencies runs. 24 hex = 96 bits.
+    od -An -N12 -tx1 /dev/urandom | tr -d ' \n'
 }
 
 # Single source of truth for XHTTP extra params (padding + mux + flow control).

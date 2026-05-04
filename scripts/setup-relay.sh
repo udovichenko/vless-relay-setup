@@ -71,7 +71,7 @@ main() {
             exit 1
         fi
         hysteria_port_end=$((hysteria_port + 1000))
-        log_info "Hysteria 2 range: ${hysteria_port}-${hysteria_port_end}"
+        log_info "Hysteria 2: UDP ${hysteria_port}-${hysteria_port_end}, Salamander enabled"
         prompt_input "Exit Hysteria 2 obfs password" hysteria_obfs
         validate_not_empty "$hysteria_obfs" "Hysteria obfs password" || exit 1
     fi
@@ -415,5 +415,6 @@ main() {
 }
 
 LOG_FILE="/var/log/vpn-setup-$(basename "$0" .sh)-$(date +%Y%m%d-%H%M%S).log"
+install -m 0600 /dev/null "$LOG_FILE"
 main "$@" 2>&1 | tee "$LOG_FILE"
 exit "${PIPESTATUS[0]}"
