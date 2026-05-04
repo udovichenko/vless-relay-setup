@@ -48,9 +48,10 @@ main() {
     log_info "Panel port: $panel_port (random)"
     log_info "Panel path: $panel_path (random)"
 
-    prompt_input "Admin username" admin_user "admin"
-    validate_ascii "$admin_user" "Username" || exit 1
-    prompt_password "Admin password" admin_pass
+    admin_user="${ADMIN_USER:-admin}"
+    admin_pass="${ADMIN_PASS:-$(generate_admin_pass)}"
+    log_info "Admin user: $admin_user (auto, override via ADMIN_USER env)"
+    log_info "Admin pass: auto-generated, shown in the final summary (override via ADMIN_PASS env)"
 
     local ssh_port=22
     prompt_input "Custom SSH port (Enter for default 22)" ssh_port "22"
@@ -243,6 +244,7 @@ EOF
     echo ""
     echo "  Panel:     https://${server_ip}:${panel_port}/${panel_path}/"
     echo "  User:      ${admin_user}"
+    echo "  Password:  ${admin_pass}"
     echo ""
     if [[ "$ssh_port" != "22" ]]; then
         echo "  SSH port:  ${ssh_port}"

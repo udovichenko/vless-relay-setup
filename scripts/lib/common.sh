@@ -69,15 +69,6 @@ prompt_password() {
     printf -v "$var_name" '%s' "$input"
 }
 
-validate_ascii() {
-    local value="$1"
-    local name="$2"
-    if [[ ! "$value" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
-        log_error "$name contains invalid characters (use English letters, digits, _ . -)"
-        return 1
-    fi
-}
-
 validate_ip() {
     local ip="$1"
     [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
@@ -123,6 +114,10 @@ generate_random_port() {
 
 generate_random_path() {
     openssl rand -hex 8
+}
+
+generate_admin_pass() {
+    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16
 }
 
 # Single source of truth for XHTTP extra params (padding + mux + flow control).
