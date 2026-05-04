@@ -45,9 +45,9 @@ main() {
     local panel_port panel_path admin_user admin_pass
     panel_port=$(generate_random_port)
     panel_path=$(generate_random_path)
+    log_info "Panel port: $panel_port (random)"
+    log_info "Panel path: $panel_path (random)"
 
-    prompt_input "3X-UI panel port" panel_port "$panel_port"
-    prompt_input "3X-UI panel secret path" panel_path "$panel_path"
     prompt_input "Admin username" admin_user "admin"
     validate_ascii "$admin_user" "Username" || exit 1
     prompt_password "Admin password" admin_pass
