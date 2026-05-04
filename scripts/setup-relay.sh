@@ -66,7 +66,12 @@ main() {
     local hysteria_port="" hysteria_port_end="" hysteria_obfs=""
     prompt_input "Exit Hysteria 2 port (Enter if not configured)" hysteria_port ""
     if [[ -n "$hysteria_port" ]]; then
-        prompt_input "Exit Hysteria 2 port range end" hysteria_port_end "$((hysteria_port + 1000))"
+        if ! [[ "$hysteria_port" =~ ^[0-9]+$ ]] || [[ "$hysteria_port" -lt 1024 || "$hysteria_port" -gt 64535 ]]; then
+            log_error "Invalid Hysteria port: $hysteria_port (must be 1024-64535)"
+            exit 1
+        fi
+        hysteria_port_end=$((hysteria_port + 1000))
+        log_info "Hysteria 2 range: ${hysteria_port}-${hysteria_port_end}"
         prompt_input "Exit Hysteria 2 obfs password" hysteria_obfs
         validate_not_empty "$hysteria_obfs" "Hysteria obfs password" || exit 1
     fi
