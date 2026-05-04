@@ -44,8 +44,8 @@ main() {
     echo ""
 
     local exit_ip exit_port exit_uuid exit_pubkey exit_short_id exit_sni exit_xhttp_path
+    exit_port=443
     prompt_input "Exit server IP" exit_ip
-    prompt_input "Exit server port" exit_port "443"
     prompt_input "Exit server UUID" exit_uuid
     prompt_input "Exit server Reality public key" exit_pubkey
     prompt_input "Exit server Reality short ID" exit_short_id
