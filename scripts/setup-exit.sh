@@ -260,7 +260,7 @@ EOF
     echo "  Exit Reality pubkey:  $REALITY_PUBLIC_KEY"
     echo "  Exit Reality shortId: $REALITY_SHORT_ID"
     echo "  Exit Reality SNI:     $REALITY_SERVER_NAME"
-    echo "  Exit XHTTP path:     $xhttp_path"
+    echo "  Exit XHTTP path:      $xhttp_path"
     if [[ -n "$cdn_domain" ]]; then
         echo "  Exit CDN domain:      $cdn_domain"
         echo "  Exit CDN path:        $cdn_path"
