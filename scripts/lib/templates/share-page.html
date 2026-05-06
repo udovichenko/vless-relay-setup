@@ -25,9 +25,17 @@ body {
 h1 {
     font-size: 28px;
     text-align: center;
-    margin: 8px 0 24px;
+    margin: 8px 0 8px;
     font-weight: 600;
 }
+.profile {
+    text-align: center;
+    color: #8b949e;
+    font-size: 14px;
+    margin-bottom: 24px;
+    word-break: break-word;
+}
+.profile b { color: #e6edf3; font-weight: 500; }
 .qr-wrap {
     background: #fff;
     padding: 16px;
@@ -99,7 +107,7 @@ ol li:last-child { margin-bottom: 0; }
 <body>
 
 <h1>Доступ к VPN</h1>
-
+{{CLIENT_NAME_BLOCK}}
 <div class="qr-wrap">
   <canvas id="qr" width="280" height="280"></canvas>
 </div>

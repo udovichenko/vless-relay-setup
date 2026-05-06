@@ -22,6 +22,7 @@ import html
 import json
 import os
 import re
+import sqlite3
 import sys
 
 UPSTREAM = os.environ.get("SUB_UPSTREAM", "http://127.0.0.1:8443")
@@ -46,7 +47,8 @@ HAPP_ROUTING_HEADER = ""
 # админ может руками задать любой ASCII через панель. Достаточно матчить
 # два непустых сегмента — domain Caddy уже изолировал нас на sub.*.
 SHARE_PAGE_TEMPLATE_PATH = os.path.join(CONF_DIR, "share-page.html")
-SHARE_PAGE_PATH_REGEX = re.compile(r"^/[^/]+/[^/]+/?$")
+SHARE_PAGE_PATH_REGEX = re.compile(r"^/[^/]+/([^/]+)/?$")
+XUI_DB_PATH = os.environ.get("XUI_DB_PATH", "/etc/x-ui/x-ui.db")
 _share_page_template = None  # lazy-loaded; "" means "not available, don't retry"
 
 
@@ -115,6 +117,30 @@ def _load_share_page_template():
     return _share_page_template
 
 
+def lookup_client_name(sub_id):
+    """Look up client email/name in 3X-UI's SQLite DB by subId. Returns "" if not found or DB unavailable."""
+    if not sub_id:
+        return ""
+    try:
+        con = sqlite3.connect(f"file:{XUI_DB_PATH}?mode=ro", uri=True, timeout=2)
+        try:
+            for (settings_json,) in con.execute("SELECT settings FROM inbounds"):
+                if not settings_json:
+                    continue
+                try:
+                    clients = json.loads(settings_json).get("clients", [])
+                except (ValueError, TypeError):
+                    continue
+                for c in clients:
+                    if c.get("subId") == sub_id:
+                        return c.get("email", "") or ""
+        finally:
+            con.close()
+    except sqlite3.Error:
+        pass
+    return ""
+
+
 def render_share_page(host, request_path):
     """Рендерит share-page HTML. Возвращает bytes или None если шаблон отсутствует."""
     template = _load_share_page_template()
@@ -130,12 +156,21 @@ def render_share_page(host, request_path):
     shadowrocket_link = "sub://" + sub_url_b64
     v2raytun_link = "v2raytun://import/" + urllib.parse.quote(sub_url, safe="")
 
+    m = SHARE_PAGE_PATH_REGEX.match(request_path)
+    sub_id = m.group(1).rstrip("/") if m else ""
+    client_name = lookup_client_name(sub_id)
+    if client_name:
+        name_block = f'<div class="profile">Профиль: <b>{html.escape(client_name)}</b></div>'
+    else:
+        name_block = ""
+
     page = (template
         .replace("{{SUBSCRIPTION_URL_HTML}}", html.escape(sub_url))
         .replace("{{SUBSCRIPTION_URL_JSON}}", json.dumps(sub_url))
         .replace("{{HAPP_DEEPLINK}}", html.escape(happ_link))
         .replace("{{V2RAYTUN_DEEPLINK}}", html.escape(v2raytun_link))
         .replace("{{SHADOWROCKET_DEEPLINK}}", html.escape(shadowrocket_link))
+        .replace("{{CLIENT_NAME_BLOCK}}", name_block)
     )
     return page.encode("utf-8")
 
