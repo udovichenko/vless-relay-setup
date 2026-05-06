@@ -36,7 +36,7 @@ run_selfcheck_exit() {
 
     if command -v warp-cli &>/dev/null && \
        jq -e '.outbounds[] | select(.tag=="warp")' "$XRAY_CONFIG" &>/dev/null; then
-        if warp-cli status 2>/dev/null | grep -qE 'Connected'; then
+        if warp-cli --accept-tos status 2>/dev/null | grep -qE 'Connected'; then
             log_ok "WARP tunnel connected"
         else
             log_error "WARP outbound configured but warp-cli not connected"
@@ -152,12 +152,17 @@ main() {
         export NO_COLOR=1
     fi
 
-    # Auto-detect role
+    # Auto-detect role: standalone xray.service indicates exit. На relay
+    # xray бежит как subprocess 3X-UI и xray.service disabled/inactive
+    # (хотя файл /usr/local/etc/xray/config.json может остаться от
+    # старых установок — поэтому нельзя просто проверять файл).
     local role=""
-    if [[ -f "$XRAY_CONFIG" ]]; then
+    if systemctl is-enabled --quiet xray 2>/dev/null; then
         role="exit"
     elif [[ -f "$XUI_DB" ]]; then
         role="relay"
+    elif [[ -f "$XRAY_CONFIG" ]]; then
+        role="exit"
     else
         log_error "Cannot detect role — neither $XRAY_CONFIG nor $XUI_DB found"
         log_error "Has the server been set up? Try: sudo ./setup.sh exit  or  sudo ./setup.sh relay"

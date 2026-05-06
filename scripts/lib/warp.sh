@@ -50,28 +50,34 @@ install_warp() {
 
     systemctl enable --now warp-svc
 
+    # warp-svc на свежем apt-install обычно встаёт за 15-25 секунд,
+    # 30s даём с запасом. Плюс на первом вызове warp-cli требует
+    # явного accept-TOS — без флага падает с prompt про TTY.
     local _i
-    for _i in 1 2 3 4 5 6 7 8 9 10; do
-        if warp-cli status &>/dev/null; then
+    for _i in $(seq 1 30); do
+        if warp-cli --accept-tos status &>/dev/null; then
             log_ok "Cloudflare WARP installed (warp-svc up)"
             return 0
         fi
         sleep 1
     done
-    log_error "warp-svc failed to start after 10s"
+    log_error "warp-svc failed to start after 30s"
     return 1
 }
 
 configure_warp() {
     log_info "Configuring WARP as socks5 on 127.0.0.1:${WARP_PROXY_PORT}..."
 
-    if ! warp-cli status 2>/dev/null | grep -qE 'Registered|Connected'; then
-        warp-cli registration new </dev/null
+    # --accept-tos на каждый вызов — на свежей установке без него команды
+    # требуют интерактивного TTY. После первого --accept-tos флаг
+    # эффективно no-op (TOS уже принят), но безопаснее не предполагать.
+    if ! warp-cli --accept-tos status 2>/dev/null | grep -qE 'Registered|Connected'; then
+        warp-cli --accept-tos registration new </dev/null
     fi
 
-    warp-cli mode proxy
-    warp-cli proxy port "$WARP_PROXY_PORT"
-    warp-cli connect
+    warp-cli --accept-tos mode proxy
+    warp-cli --accept-tos proxy port "$WARP_PROXY_PORT"
+    warp-cli --accept-tos connect
 
     local _i
     for _i in 1 2 3 4 5; do
@@ -87,18 +93,18 @@ configure_warp() {
 }
 
 restart_warp() {
-    warp-cli disconnect 2>/dev/null || true
-    warp-cli connect
+    warp-cli --accept-tos disconnect 2>/dev/null || true
+    warp-cli --accept-tos connect
 }
 
 is_warp_running() {
-    warp-cli status 2>/dev/null | grep -qE 'Status update: Connected|^Connected'
+    warp-cli --accept-tos status 2>/dev/null | grep -qE 'Status update: Connected|^Connected'
 }
 
 uninstall_warp() {
     log_info "Removing Cloudflare WARP..."
-    warp-cli disconnect 2>/dev/null || true
-    warp-cli registration delete 2>/dev/null || true
+    warp-cli --accept-tos disconnect 2>/dev/null || true
+    warp-cli --accept-tos registration delete 2>/dev/null || true
     systemctl stop warp-svc 2>/dev/null || true
     systemctl disable warp-svc 2>/dev/null || true
     DEBIAN_FRONTEND=noninteractive apt-get purge -y cloudflare-warp 2>/dev/null || true

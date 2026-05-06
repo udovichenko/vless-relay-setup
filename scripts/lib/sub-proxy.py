@@ -42,8 +42,11 @@ HAPP_ROUTING_HEADER = ""
 
 # share-page (issue #21): один URL для подписки и для share-page,
 # браузер vs apps различаются по Accept-заголовку.
+# subId не ограничен по charset: 3X-UI native генерит base32-ish строки;
+# админ может руками задать любой ASCII через панель. Достаточно матчить
+# два непустых сегмента — domain Caddy уже изолировал нас на sub.*.
 SHARE_PAGE_TEMPLATE_PATH = os.path.join(CONF_DIR, "share-page.html")
-SHARE_PAGE_PATH_REGEX = re.compile(r"^/[^/]+/([a-fA-F0-9]{8,32})/?$")
+SHARE_PAGE_PATH_REGEX = re.compile(r"^/[^/]+/[^/]+/?$")
 _share_page_template = None  # lazy-loaded; "" means "not available, don't retry"
 
 
@@ -184,7 +187,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         accept = self.headers.get("Accept", "")
-        is_browser = "text/html" in accept
+        ua = self.headers.get("User-Agent", "")
+        # Apps (Happ, v2rayN, Shadowrocket, etc.) часто шлют Accept с text/html
+        # — поэтому одного Accept мало. Реальный браузер ВСЕГДА содержит
+        # "Mozilla" в UA (даже Safari/Edge/Chrome — все маскируются под него
+        # с 90-х). Такого нет в UA app-клиентов.
+        is_browser = "text/html" in accept and "Mozilla" in ua
 
         # Browser → /<subPath>/<subId> → отдаём share-page вместо 3X-UI HTML.
         # Используем parsed.path (без query/fragment) для матчинга — иначе
@@ -209,11 +217,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             # Если шаблон не загрузился — fallback на старое поведение (passthrough)
 
+        # Если запрос к subscription URL приходит от app (UA без Mozilla),
+        # форсим Accept: */* upstream — иначе 3X-UI отдаст HTML по их
+        # Accept: text/html, и мы не сможем подмешать CDN/Hysteria-ссылки
+        # в base64 список.
+        upstream_accept = accept
+        if SHARE_PAGE_PATH_REGEX.match(parsed.path) and not is_browser:
+            upstream_accept = "*/*"
+
         try:
             headers = {
                 "Host": self.headers.get("Host", "localhost"),
                 "User-Agent": self.headers.get("User-Agent", ""),
-                "Accept": accept,
+                "Accept": upstream_accept,
             }
             req = urllib.request.Request(
                 f"{UPSTREAM}{self.path}",

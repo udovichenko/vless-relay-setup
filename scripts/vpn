@@ -96,10 +96,13 @@ rollback_settings() {
 # Health check — ждём что xray забиндил :443 и процесс xray жив.
 # 15 итераций по 1с — xray внутри 3X-UI стартует медленнее самого x-ui.
 wait_xray_listening() {
+    # На relay xray бежит как subprocess 3X-UI; cmdline такой:
+    # `bin/xray-linux-amd64 -c bin/config.json` — слова `x-ui` в argv нет
+    # (он только в working dir /usr/local/x-ui). Поэтому матчим бинарник.
     local _i
     for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
         if ss -tln 2>/dev/null | grep -qE ':443\s' \
-           && pgrep -f 'xray.*x-ui' > /dev/null 2>&1; then
+           && pgrep -af 'xray.*-c' > /dev/null 2>&1; then
             return 0
         fi
         sleep 1

@@ -96,7 +96,10 @@ check_cert_expiry() {
     # Caddy may use Let's Encrypt OR ZeroSSL (fallback when LE rate-limited)
     # → glob over all ACME CA dirs.
     local cert_file=""
+    # Caddy install_caddy override запускает service как root → certs в
+    # /root/.local/, а не /var/lib/caddy/. Глобим оба варианта.
     local cert_glob_paths=(
+        /root/.local/share/caddy/certificates/*/"${domain}"/"${domain}".crt
         /var/lib/caddy/.local/share/caddy/certificates/*/"${domain}"/"${domain}".crt
         /root/.acme.sh/"${domain}"_ecc/"${domain}".cer
         /root/.acme.sh/"${domain}"/"${domain}".cer

@@ -206,7 +206,7 @@ main() {
     # leaves xray referencing a disconnected WARP socks5 listener.
     if [[ "$warp_pending_disable" == true ]]; then
         log_info "Stopping warp-svc and disconnecting WARP..."
-        warp-cli disconnect 2>/dev/null || true
+        warp-cli --accept-tos disconnect 2>/dev/null || true
         systemctl stop warp-svc 2>/dev/null || true
         log_ok "WARP daemon stopped (package preserved — use uninstall --purge-warp to remove)"
     fi
