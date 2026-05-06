@@ -52,6 +52,24 @@ Hysteria 2 (optional, requires SelfSteal):
 
 Setup order is always exit first, then relay (relay needs exit server's keys/UUID).
 
+### Subscription Channels (full SelfSteal + CDN + Hysteria deployment)
+
+A client subscription emits up to 5 channels. All share one UUID. Generation:
+- **Channel 1** (Relay) is rendered by 3X-UI's subscription generator from the relay inbound. Sub-proxy injects `extra=` via `RELAY_XHTTP_EXTRA` env (3X-UI doesn't emit it itself).
+- **Channels 2-5** are appended by sub-proxy from systemd env vars (`DIRECT_VLESS_LINK`, `CDN_VLESS_LINK_ASYM`, `CDN_VLESS_LINK`, `HYSTERIA_LINK`).
+
+| # | Channel | Client connects to | Wire protocol | Server-side path |
+|---|---|---|---|---|
+| 1 | Relay (main) | `relay_domain:443` | VLESS Reality **XHTTP** (mode=auto), SelfSteal SNI | Relay XHTTP inbound → fragment → proxy-exit (Reality RAW+Vision) → exit:443 main inbound |
+| 2 | Direct Exit | `exit_ip:443` | VLESS Reality **RAW + xtls-rprx-vision**, sni=`exit_domain` | Exit main inbound directly (skips relay) |
+| 3 | CDN Asymmetric | Upload: `cdn_domain:443` (Cloudflare). Download: `exit_ip:443` direct | Upload — VLESS XHTTP packet-up via CF. Download — Reality RAW+Vision direct (via `downloadSettings` in `extra`) | Upload → Caddy → exit's local XHTTP inbound (127.0.0.1:cdn_port). Download → exit main RAW+Vision inbound |
+| 4 | CDN Symmetric | `cdn_domain:443` (Cloudflare both ways) | VLESS XHTTP packet-up | Cloudflare → exit:443 → Caddy unix socket → exit's local XHTTP inbound |
+| 5 | Hysteria 2 | `exit_ip:hysteria_port` (UDP, port-hopping range) | Hysteria 2 + Salamander obfs, password = exit UUID | Standalone hysteria-server, separate from XRAY |
+
+**Critical invariant**: exit's main inbound is **Reality RAW + xtls-rprx-vision** (since v1.10.0, not XHTTP). Channels 1, 2, and 3-download all terminate on this single inbound. Channel 1 reaches it via relay's `proxy-exit` outbound; channel 2 reaches it directly; channel 3-download reaches it via the client's secondary connection per `downloadSettings`. Exit's XHTTP inbound exists only for CDN traffic and listens on 127.0.0.1.
+
+**Exit-side routing** (applies to all 5 channels uniformly): AI domains (geosite: openai/anthropic/google-gemini/cursor) → WARP outbound (socks5 127.0.0.1:40000) when WARP enabled; geoip:private → block; rest → freedom (UseIP).
+
 ## Entry Points
 
 - `scripts/setup.sh` — router: delegates to setup/update/uninstall scripts. Passes extra args (`--force`, `--upgrade`)
