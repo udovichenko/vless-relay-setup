@@ -1,5 +1,10 @@
 # VLESS Reality Relay — Self-Hosted Encrypted Tunnel
 
+[![Latest release](https://img.shields.io/github/v/release/nozikov/vless-relay-setup)](https://github.com/nozikov/vless-relay-setup/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/nozikov/vless-relay-setup)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Debian%2012%20%7C%20Ubuntu%2022.04%2B-informational)](#prerequisites)
+[![Made with Bash](https://img.shields.io/badge/made%20with-Bash-1f425f)](#)
+
 Self-hosted relay infrastructure for encrypted inter-node connectivity. Automated deployment on two VPS nodes.
 
 > **Legal Notice:** This project is intended for lawful use cases only — corporate network segmentation, privacy research, and infrastructure redundancy. Users are solely responsible for compliance with applicable local laws and regulations.
