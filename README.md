@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/github/license/nozikov/vless-relay-setup)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Debian%2012%20%7C%20Ubuntu%2022.04%2B-informational)](#требования)
 [![Made with Bash](https://img.shields.io/badge/made%20with-Bash-1f425f)](#)
-[![lint](https://github.com/nozikov/vless-relay-setup/actions/workflows/lint.yml/badge.svg)](https://github.com/nozikov/vless-relay-setup/actions/workflows/lint.yml)
+[![checks](https://github.com/nozikov/vless-relay-setup/actions/workflows/checks.yml/badge.svg)](https://github.com/nozikov/vless-relay-setup/actions/workflows/checks.yml)
 
 Двухзвенная relay-инфраструктура для зашифрованного соединения между узлами. Автоматическое развёртывание на два VPS-сервера.
 

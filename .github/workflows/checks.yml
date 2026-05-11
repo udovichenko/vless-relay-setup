@@ -1,4 +1,4 @@
-name: lint
+name: checks
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/ruff-action@v3
         with:
-          src: scripts/lib/sub-proxy.py scripts/lint
+          src: scripts/lib/sub-proxy.py scripts/lint tests/invariants
 
   lib-imports:
     name: lib-imports
@@ -64,3 +64,20 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Validate JSON templates
         run: jq empty scripts/lib/templates/happ-routing-ru.json
+
+  invariants:
+    name: invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: validate-heredocs (JSON/YAML/systemd in heredocs)
+        run: python3 tests/invariants/validate-heredocs.py
+      - name: validate-templates ({{placeholder}} ↔ code)
+        run: python3 tests/invariants/validate-templates.py
+      - name: validate-urls (VLESS/Hysteria URL format)
+        run: python3 tests/invariants/validate-urls.py
