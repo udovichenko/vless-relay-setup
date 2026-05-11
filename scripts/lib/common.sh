@@ -1,5 +1,7 @@
 #!/bin/bash
 # Common functions for VPN setup scripts
+# shellcheck disable=SC2034
+# (vars like PROJECT_VERSION, color codes are consumed by sourcing scripts)
 
 set -euo pipefail
 

@@ -1,0 +1,66 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run shellcheck
+        run: |
+          shellcheck -S warning -e SC1090,SC1091 \
+            scripts/setup.sh \
+            scripts/setup-exit.sh \
+            scripts/setup-relay.sh \
+            scripts/update-exit.sh \
+            scripts/update-relay.sh \
+            scripts/uninstall.sh \
+            scripts/selfcheck.sh \
+            scripts/vpn \
+            scripts/lib/*.sh
+
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@v3
+        with:
+          src: scripts/lib/sub-proxy.py scripts/lint
+
+  lib-imports:
+    name: lib-imports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check lib imports in orchestration scripts
+        run: |
+          python3 scripts/lint/lib-imports-check.py \
+            scripts/setup.sh \
+            scripts/setup-exit.sh \
+            scripts/setup-relay.sh \
+            scripts/update-exit.sh \
+            scripts/update-relay.sh \
+            scripts/uninstall.sh \
+            scripts/selfcheck.sh \
+            scripts/vpn
+
+  validate-templates:
+    name: validate-templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Validate JSON templates
+        run: jq empty scripts/lib/templates/happ-routing-ru.json
