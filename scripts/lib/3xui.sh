@@ -41,8 +41,13 @@ install_3xui() {
     # The installer asks interactive questions (confirm, port, SSL method, etc.)
     # Create an input file with empty lines to accept all defaults.
     # Using a file instead of pipe (yes "") avoids SIGPIPE with set -o pipefail.
+    # Pin 3X-UI to v2.8.11. v3.0.0+ moved clients from inbounds.settings JSON to
+    # separate `clients` + `client_inbounds` tables, and the sub-server now reads
+    # only from the normalised tables. Our SQL-driven setup still writes to the
+    # legacy JSON path, so a fresh install on v3.x produces 404 from sub-server
+    # (issue #44). Until we migrate to the panel REST API, stay on v2.x.
     printf '\n%.0s' {1..100} > /tmp/xui-answers
-    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) < /tmp/xui-answers
+    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) v2.8.11 < /tmp/xui-answers
     rm -f /tmp/xui-answers
 
     # Close temporary port 80 — unless Caddy needs it permanently (SelfSteal mode)

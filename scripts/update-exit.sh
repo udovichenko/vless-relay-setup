@@ -175,8 +175,9 @@ main() {
 
         if command -v x-ui &> /dev/null; then
             log_info "Upgrading 3X-UI..."
+            # Pinned to v2.8.11 — see scripts/lib/3xui.sh:install_3xui for rationale.
             printf '\n%.0s' {1..100} > /tmp/xui-answers
-            bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) < /tmp/xui-answers
+            bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) v2.8.11 < /tmp/xui-answers
             rm -f /tmp/xui-answers
             log_ok "3X-UI upgraded"
         fi
