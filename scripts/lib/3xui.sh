@@ -2,33 +2,19 @@
 # 3X-UI panel installation and configuration
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/xui-api.sh"
 
 XUI_BIN="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/x-ui"
 XUI_DB="/etc/x-ui/x-ui.db"
 
+# NOTE: client/inbound writes are delegated to lib/xui-api.sh (REST API on v3.x).
+# This module sources xui-api.sh directly (same as common.sh) so create_3xui_relay_inbound
+# and sync_cdn_clients can call xui_api_*. Orchestration scripts that ALSO call xui_api_*
+# directly still source xui-api.sh themselves (enforced by the lib-imports invariant).
+
 # xhttp_extra_json() shared helper now lives in common.sh so xray.sh (exit)
 # and 3xui.sh (relay) use the same values. This prevents mismatch between
 # relay outbound scMaxEachPostBytes and exit inbound cap.
-
-# Idempotent INSERT into client_traffics (issue #38). 3X-UI doesn't sync
-# settings.clients[] → client_traffics at startup — only on add via UI/API.
-# Without a row here UI shows "—" for traffic and per-client limits don't apply.
-# Caller responsibility: x-ui must be stopped (else in-memory snapshot wins).
-ensure_client_traffics_row() {
-    local email="$1"
-    local inbound_tag="${2:-inbound-443}"
-    local s_email="${email//\'/\'\'}"
-    local s_tag="${inbound_tag//\'/\'\'}"
-    sqlite3 "$XUI_DB" "
-        INSERT INTO client_traffics (inbound_id, enable, email, up, down, total, expiry_time, reset)
-        SELECT id, 1, '${s_email}', 0, 0, 0, 0, 0
-        FROM inbounds
-        WHERE tag='${s_tag}'
-          AND NOT EXISTS (
-              SELECT 1 FROM client_traffics WHERE email='${s_email}'
-          );
-    "
-}
 
 install_3xui() {
     local skip_acme_port="${1:-false}"
@@ -38,16 +24,25 @@ install_3xui() {
     # Open port 80 temporarily — the installer uses it for Let's Encrypt SSL cert
     ufw allow 80/tcp comment "ACME temp" > /dev/null 2>&1 || true
 
-    # The installer asks interactive questions (confirm, port, SSL method, etc.)
-    # Create an input file with empty lines to accept all defaults.
-    # Using a file instead of pipe (yes "") avoids SIGPIPE with set -o pipefail.
-    # Pin 3X-UI to v2.8.11. v3.0.0+ moved clients from inbounds.settings JSON to
-    # separate `clients` + `client_inbounds` tables, and the sub-server now reads
-    # only from the normalised tables. Our SQL-driven setup still writes to the
-    # legacy JSON path, so a fresh install on v3.x produces 404 from sub-server
-    # (issue #44). Until we migrate to the panel REST API, stay on v2.x.
-    printf '\n%.0s' {1..100} > /tmp/xui-answers
-    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) v2.8.11 < /tmp/xui-answers
+    # Pin 3X-UI to v3.1.0 and pull install.sh from the SAME tag (not master) so the
+    # interactive prompt set is stable. Verified against the v3.1.0 installer source
+    # (config_after_install / prompt_and_setup_ssl), the fresh-install prompt order is:
+    #   1. Database type        [Choose [1]:]        blank → 1 = SQLite
+    #   2. Customize panel port? [y/n]               blank → random port
+    #   3. SSL method            [Choose (default 2)] → 4 = Skip SSL
+    #      (blank here defaults to 2 = Let's Encrypt IP cert, which runs acme.sh on
+    #       :80 and collides with Caddy — must explicitly pick 4)
+    #   4. Bind panel to 127.0.0.1 only? [y/N]       blank → N (keep all-interfaces)
+    # The SSL prompt is the 3rd read, not the 2nd — feeding 4 too early lands it on the
+    # panel-port question and leaves SSL at its IP-cert default. Order matters.
+    {
+        printf '\n'   # 1. DB type            → SQLite (default 1)
+        printf '\n'   # 2. Customize port?    → no (random port)
+        printf '4\n'  # 3. SSL method         → Skip SSL
+        printf '\n'   # 4. Bind to 127.0.0.1? → N (all interfaces)
+        printf '\n%.0s' {1..96}  # any further/unexpected prompts: accept defaults
+    } > /tmp/xui-answers
+    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/v3.1.0/install.sh) v3.1.0 < /tmp/xui-answers
     rm -f /tmp/xui-answers
 
     # Close temporary port 80 — unless Caddy needs it permanently (SelfSteal mode)
@@ -265,15 +260,13 @@ create_3xui_relay_inbound() {
     local dest="$5"
     local server_name="$6"
 
-    log_info "Creating VLESS Reality relay inbound in 3X-UI database..."
+    log_info "Creating VLESS Reality relay inbound via 3X-UI API..."
 
-    local sub_id settings stream_settings sniffing
-    sub_id="${7:-$(head -c 8 /dev/urandom | xxd -p)}"
+    local sub_id="${7:-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')}"
     local exit_ip="${8:-}"
     local xver="${9:-0}"
     local relay_xhttp_path="${10:-$(generate_random_path)}"
 
-    # Build inbound name from geo IP (fallback: "Relay → Exit")
     local relay_city exit_city remark
     relay_city=$(curl -s --max-time 3 "http://ip-api.com/json/?fields=city" | jq -r '.city // empty') || true
     if [[ -n "$exit_ip" ]]; then
@@ -281,34 +274,13 @@ create_3xui_relay_inbound() {
     fi
     remark="${relay_city:-Relay} → ${exit_city:-Exit}"
 
-    settings=$(jq -n -c \
-        --arg uuid "$relay_uuid" \
-        --arg sub_id "$sub_id" \
-        '{
-            clients: [{
-                id: $uuid,
-                flow: "",
-                email: "default-user",
-                limitIp: 0,
-                totalGB: 0,
-                expiryTime: 0,
-                enable: true,
-                subId: $sub_id,
-                tgId: "",
-                reset: 0
-            }],
-            decryption: "none",
-            fallbacks: []
-        }')
+    # Inbound is created WITHOUT clients; the seed client is added via the API
+    # (clients/add) so it lands in the normalized clients/client_inbounds tables.
+    local settings stream_settings sniffing extra_json lf_json
+    settings=$(jq -n -c '{clients: [], decryption: "none", fallbacks: []}')
 
-    # 3X-UI subscription generator reads publicKey and fingerprint
-    # from realitySettings.settings (nested), not from the top level.
-    # xhttpSettings.extra is emitted into VLESS subscription URLs (xmux etc
-    # are client-side hints — server ignores them on inbound).
-    local extra_json lf_json
     extra_json=$(xhttp_extra_json)
     lf_json=$(reality_limit_fallback_json)
-
     stream_settings=$(jq -n -c \
         --arg private_key "$private_key" \
         --arg public_key "$public_key" \
@@ -330,111 +302,41 @@ create_3xui_relay_inbound() {
                 privateKey: $private_key,
                 publicKey: $public_key,
                 shortIds: [$short_id],
-                settings: {
-                    publicKey: $public_key,
-                    fingerprint: "chrome",
-                    spiderX: ""
-                }
+                settings: { publicKey: $public_key, fingerprint: "chrome", spiderX: "" }
             } + $lf),
-            xhttpSettings: {
-                path: ("/"+$relay_path),
-                mode: "auto",
-                extra: $extra
-            }
+            xhttpSettings: { path: ("/"+$relay_path), mode: "auto", extra: $extra }
         }')
 
-    sniffing=$(jq -n -c '{
-        enabled: true,
-        destOverride: ["http","tls","quic"],
-        routeOnly: true
-    }')
+    sniffing=$(jq -n -c '{enabled: true, destOverride: ["http","tls","quic"], routeOnly: true}')
 
-    # Escape single quotes for SQLite
-    local s_settings="${settings//\'/\'\'}"
-    local s_stream="${stream_settings//\'/\'\'}"
-    local s_sniffing="${sniffing//\'/\'\'}"
+    # v3 inbounds/add: settings/streamSettings/sniffing are escaped JSON STRINGS.
+    local inbound_json
+    inbound_json=$(jq -n -c \
+        --arg remark "$remark" \
+        --arg settings "$settings" \
+        --arg stream "$stream_settings" \
+        --arg sniffing "$sniffing" \
+        '{
+            remark: $remark, port: 443, protocol: "vless",
+            enable: true, expiryTime: 0, total: 0, listen: "",
+            tag: "inbound-443",
+            settings: $settings, streamSettings: $stream, sniffing: $sniffing
+        }')
 
-    # Clean up any existing inbound with the same tag (e.g. --force reinstall) —
-    # вместе с осиротевшей строкой client_traffics seed-клиента.
-    sqlite3 "$XUI_DB" "DELETE FROM inbounds WHERE tag='inbound-443';" || true
-    sqlite3 "$XUI_DB" "DELETE FROM client_traffics WHERE email='default-user';" || true
+    local inbound_id
+    inbound_id=$(xui_api_add_inbound "$inbound_json") || { log_error "Failed to create relay inbound"; return 1; }
+    log_ok "VLESS Reality XHTTP relay inbound created (port 443, tag inbound-443, id $inbound_id)"
 
-    sqlite3 "$XUI_DB" "INSERT INTO inbounds (
-        user_id, up, down, total, remark, enable, expiry_time,
-        listen, port, protocol, settings, stream_settings,
-        tag, sniffing
-    ) VALUES (
-        1, 0, 0, 0, '${remark//\'/\'\'}', 1, 0,
-        '', 443, 'vless', '${s_settings}', '${s_stream}',
-        'inbound-443', '${s_sniffing}'
-    );"
-
-    # Issue #38: client_traffics row нужен явно — 3X-UI не sync'ает
-    # settings.clients[] в эту таблицу при старте, только при add через UI/API.
-    ensure_client_traffics_row "default-user"
-
-    log_ok "VLESS Reality XHTTP relay inbound created (port 443, tag inbound-443)"
-    log_info "  Default client subId: $sub_id"
-}
-
-# 3X-UI normalizes inbound JSON on first restart after INSERT, stripping
-# fields it doesn't expect in server-side config (subId, realitySettings.settings).
-# This function re-adds them so subscriptions work correctly.
-# Must be called AFTER the x-ui restart that follows create_3xui_relay_inbound.
-patch_3xui_relay_inbound() {
-    local sub_id="$1"
-    local public_key="$2"
-
-    log_info "Patching relay inbound subscription fields..."
-
-    local current_settings current_stream extra_json lf_json
-    extra_json=$(xhttp_extra_json)
-    lf_json=$(reality_limit_fallback_json)
-
-    # Re-add subId to client settings
-    current_settings=$(sqlite3 "$XUI_DB" \
-        "SELECT settings FROM inbounds WHERE tag='inbound-443';")
-    local patched_settings
-    patched_settings=$(echo "$current_settings" | jq -c \
-        --arg sub_id "$sub_id" \
-        '.clients[0].subId = $sub_id | .clients[0].tgId = "" | .clients[0].reset = 0')
-    if [[ -z "$patched_settings" ]]; then
-        log_error "jq failed to patch client settings (input may be malformed)"
-        exit 1
-    fi
-    local s_settings="${patched_settings//\'/\'\'}"
-    sqlite3 "$XUI_DB" \
-        "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-443';"
-
-    # Re-add realitySettings.settings (publicKey + fingerprint for subscription URLs).
-    # Re-add xhttpSettings.extra (xmux + padding) — 3X-UI may strip it on first normalize.
-    # Re-add realitySettings.limitFallback{Upload,Download} — non-standard for 3X-UI UI,
-    # likely stripped on normalize. Idempotent: if not stripped, re-set is a no-op.
-    # Note: `.realitySettings += $lf` is shallow merge — adds only limitFallback keys,
-    # preserves .realitySettings.settings set in the same pipeline.
-    current_stream=$(sqlite3 "$XUI_DB" \
-        "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';")
-    local patched_stream
-    patched_stream=$(echo "$current_stream" | jq -c \
-        --arg public_key "$public_key" \
-        --argjson extra "$extra_json" \
-        --argjson lf "$lf_json" \
-        '.realitySettings.settings = {
-            publicKey: $public_key,
-            fingerprint: "chrome",
-            spiderX: ""
-        }
-        | .xhttpSettings.extra = $extra
-        | .realitySettings += $lf')
-    if [[ -z "$patched_stream" ]]; then
-        log_error "jq failed to patch stream settings (input may be malformed)"
-        exit 1
-    fi
-    local s_stream="${patched_stream//\'/\'\'}"
-    sqlite3 "$XUI_DB" \
-        "UPDATE inbounds SET stream_settings='${s_stream}' WHERE tag='inbound-443';"
-
-    log_ok "Relay inbound patched (subId + publicKey + XHTTP extra + Reality limitFallback)"
+    # Add the seed default-user client via the API so it lands in the normalized
+    # clients/client_inbounds tables (fixes #44). Done here (not in the caller) so
+    # the inbound id stays internal and this function returns nothing on stdout —
+    # log_* write to stdout, which would otherwise pollute a captured return value.
+    local seed_client
+    seed_client=$(jq -n -c --arg id "$relay_uuid" --arg s "$sub_id" \
+        '{id:$id, email:"default-user", flow:"", limitIp:0, totalGB:0, expiryTime:0, enable:true, subId:$s, tgId:0, reset:0, comment:""}')
+    xui_api_add_client "$inbound_id" "$seed_client" \
+        || { log_error "Failed to create seed client (default-user)"; return 1; }
+    log_ok "Seed client default-user created (subId $sub_id)"
 }
 
 configure_3xui_subscription() {
@@ -567,7 +469,7 @@ create_3xui_cdn_inbound() {
                 expiryTime: 0,
                 enable: true,
                 subId: $sub_id,
-                tgId: "",
+                tgId: 0,
                 reset: 0
             }],
             decryption: "none",
@@ -656,7 +558,7 @@ patch_3xui_cdn_inbound() {
     local patched_settings
     patched_settings=$(echo "$current_settings" | jq -c \
         --arg sub_id "$sub_id" \
-        '.clients[0].subId = $sub_id | .clients[0].tgId = "" | .clients[0].reset = 0')
+        '.clients[0].subId = $sub_id | .clients[0].tgId = 0 | .clients[0].reset = 0')
     local s_settings="${patched_settings//\'/\'\'}"
     sqlite3 "$XUI_DB" \
         "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-cdn';"
@@ -665,68 +567,68 @@ patch_3xui_cdn_inbound() {
 }
 
 sync_cdn_clients() {
-    log_info "Syncing clients to CDN inbound..."
+    log_info "Syncing clients to CDN inbound (via API)..."
 
-    # Check CDN inbound exists
-    local cdn_exists
-    cdn_exists=$(sqlite3 "$XUI_DB" \
-        "SELECT COUNT(*) FROM inbounds WHERE tag='inbound-cdn';") || true
-    if [[ "$cdn_exists" != "1" ]]; then
+    local cdn_id exit_uuid
+    cdn_id=$(xui_api_inbound_id "inbound-cdn") || true
+    if [[ -z "$cdn_id" ]]; then
         log_warn "CDN inbound not found, nothing to sync"
         return 0
     fi
 
-    # Get exit UUID from CDN inbound (it's the shared UUID for all CDN clients)
-    local exit_uuid
-    exit_uuid=$(sqlite3 "$XUI_DB" \
-        "SELECT settings FROM inbounds WHERE tag='inbound-cdn';" | \
-        jq -r '.clients[0].id') || true
-    if [[ -z "$exit_uuid" || "$exit_uuid" == "null" ]]; then
-        log_error "Cannot read exit UUID from CDN inbound"
-        return 1
-    fi
-
-    # Get all clients from relay inbound (subId + email)
-    local relay_clients
-    relay_clients=$(sqlite3 "$XUI_DB" \
-        "SELECT settings FROM inbounds WHERE tag='inbound-443';" | \
-        jq -c '[.clients[] | {subId: .subId, email: .email, enable: .enable}]') || true
-    if [[ -z "$relay_clients" || "$relay_clients" == "null" ]]; then
-        log_warn "No clients found in relay inbound"
+    # Shared exit UUID = the UUID of the existing CDN inbound's client set.
+    # Read it from the CDN inbound's settings JSON (read-only, sqlite is fine).
+    exit_uuid=$(sqlite3 "$XUI_DB" "SELECT settings FROM inbounds WHERE tag='inbound-cdn';" \
+        | jq -r 'first(.clients[]?.id) // empty') || true
+    if [[ -z "$exit_uuid" ]]; then
+        log_warn "Cannot determine CDN exit UUID — skipping CDN sync"
         return 0
     fi
 
-    # Build new clients array: same subIds/emails but all with exit UUID
-    local cdn_clients
-    cdn_clients=$(echo "$relay_clients" | jq -c \
-        --arg uuid "$exit_uuid" \
-        '[.[] | {
-            id: $uuid,
-            email: (.email + "-cdn"),
-            limitIp: 0,
-            totalGB: 0,
-            expiryTime: 0,
-            enable: .enable,
-            subId: .subId,
-            tgId: "",
-            reset: 0
-        }]')
+    # Desired: one "<email>-cdn" per relay client, same subId, exit UUID.
+    local relay_clients
+    # Read relay clients from inbound-443 settings JSON: on v3 the API's clients/add
+    # back-writes this JSON in addition to the normalized tables, so it stays current.
+    relay_clients=$(sqlite3 "$XUI_DB" "SELECT settings FROM inbounds WHERE tag='inbound-443';" \
+        | jq -c '[.clients[]? | {email: (.email + "-cdn"), subId: .subId, enable: .enable}]') || true
+    [[ -z "$relay_clients" || "$relay_clients" == "null" ]] && relay_clients='[]'
+    # Safety: a relay always has >=1 client (default-user). An empty desired set
+    # here means an anomalous/empty read — do NOT proceed to the remove-extra loop,
+    # which would purge every existing -cdn client. Bail without mutating.
+    if [[ "$relay_clients" == "[]" ]]; then
+        log_warn "CDN sync: relay client set read as empty — skipping (no add/remove) to avoid purging CDN clients"
+        return 0
+    fi
 
-    # Update CDN inbound settings with synced clients
-    local cdn_settings
-    cdn_settings=$(sqlite3 "$XUI_DB" \
-        "SELECT settings FROM inbounds WHERE tag='inbound-cdn';")
-    local updated_settings
-    updated_settings=$(echo "$cdn_settings" | jq -c \
-        --argjson clients "$cdn_clients" \
-        '.clients = $clients')
-    local s_settings="${updated_settings//\'/\'\'}"
-    sqlite3 "$XUI_DB" \
-        "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-cdn';"
+    # Current CDN client emails (from clients/list, filtered to the "-cdn" convention).
+    local current_cdn
+    current_cdn=$(xui_api_list_clients | jq -c '[.[]? | select(.email|endswith("-cdn")) | .email]') || current_cdn='[]'
 
-    local count
-    count=$(echo "$cdn_clients" | jq 'length')
-    log_ok "CDN inbound synced ($count clients)"
+    # Add missing.
+    local desired_emails email
+    desired_emails=$(printf '%s' "$relay_clients" | jq -r '.[].email')
+    while IFS= read -r email; do
+        [[ -z "$email" ]] && continue
+        if ! printf '%s' "$current_cdn" | jq -e --arg e "$email" 'index($e) != null' >/dev/null; then
+            local sub_id client_json
+            sub_id=$(printf '%s' "$relay_clients" | jq -r --arg e "$email" 'first(.[]|select(.email==$e).subId)')
+            client_json=$(jq -n -c --arg id "$exit_uuid" --arg e "$email" --arg s "$sub_id" \
+                '{id:$id, email:$e, flow:"", limitIp:0, totalGB:0, expiryTime:0, enable:true, subId:$s, tgId:0, reset:0, comment:""}')
+            xui_api_add_client "$cdn_id" "$client_json" \
+                || log_warn "CDN sync: failed to add $email (continuing)"
+        fi
+    done <<< "$desired_emails"
+
+    # Remove extra (present on CDN but no matching relay client).
+    local cur_email
+    while IFS= read -r cur_email; do
+        [[ -z "$cur_email" ]] && continue
+        if ! printf '%s' "$relay_clients" | jq -e --arg e "$cur_email" 'any(.[]; .email==$e)' >/dev/null; then
+            xui_api_del_client "$cur_email" || log_warn "CDN sync: failed to remove $cur_email"
+        fi
+    done < <(printf '%s' "$current_cdn" | jq -r '.[]')
+
+    log_ok "CDN inbound synced (via API)"
 }
 
 # Идемпотентная установка симлинка /usr/local/bin/vpn → <path-to-vpn>.
