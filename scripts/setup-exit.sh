@@ -264,7 +264,7 @@ EOF
         echo "  Hysteria2: UDP ${hysteria_port}-${hysteria_port_end} (Salamander)"
     fi
     echo ""
-    echo "  Panel:     https://${server_ip}:${panel_port}/${panel_path}/"
+    echo "  Panel:     http://${server_ip}:${panel_port}/${panel_path}/"
     echo "  User:      ${admin_user}"
     echo "  Password:  ${admin_pass}"
     echo ""

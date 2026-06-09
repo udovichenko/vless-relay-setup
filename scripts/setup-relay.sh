@@ -183,6 +183,11 @@ main() {
 
         # Bind panel to localhost (Caddy proxies external access)
         xui_db_set "webListen" "127.0.0.1"
+        # Clear panel cert — guarantees plain HTTP to Caddy reverse proxy
+        # regardless of whether sub_domain is set, and even if the 3X-UI
+        # installer sets an IP cert on future versions
+        xui_db_set "webCertFile" ""
+        xui_db_set "webKeyFile" ""
 
         # SelfSteal: subscriptions via Caddy (if sub_domain provided)
         if [[ -n "$sub_domain" ]]; then

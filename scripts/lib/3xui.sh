@@ -120,7 +120,7 @@ configure_3xui() {
     x-ui start
 
     log_ok "3X-UI configured:"
-    log_info "  URL: https://<server-ip>:${panel_port}/${panel_path}/"
+    log_info "  URL: http://<server-ip>:${panel_port}/${panel_path}/"
     log_info "  User: $admin_user"
 }
 
