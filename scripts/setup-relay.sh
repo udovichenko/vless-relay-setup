@@ -14,11 +14,26 @@ source "$SCRIPT_DIR/lib/caddy.sh"
 
 main() {
     local force=false skip_ssh=false
-    for arg in "$@"; do
-        case "$arg" in
+    local relay_fingerprint_arg=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
             --force) force=true ;;
             --skip-ssh) skip_ssh=true ;;
+            --fingerprint)
+                if [[ -z "${2:-}" ]]; then
+                    log_error "--fingerprint requires a value"
+                    exit 1
+                fi
+                relay_fingerprint_arg="$2"
+                shift
+                ;;
+            --fingerprint=*) relay_fingerprint_arg="${1#*=}" ;;
+            *)
+                log_error "Unknown argument: $1"
+                exit 1
+                ;;
         esac
+        shift
     done
 
     echo "==========================================="
@@ -85,8 +100,24 @@ main() {
     validate_not_empty "$exit_short_id" "Exit short ID" || exit 1
     validate_not_empty "$exit_sni" "Exit SNI" || exit 1
 
+    local relay_fingerprint=""
+    if [[ -n "$relay_fingerprint_arg" ]]; then
+        relay_fingerprint="${relay_fingerprint_arg,,}"
+        validate_reality_fingerprint "$relay_fingerprint" || exit 1
+    elif [[ -n "${RELAY_FINGERPRINT:-}" ]]; then
+        relay_fingerprint="${RELAY_FINGERPRINT,,}"
+        validate_reality_fingerprint "$relay_fingerprint" || exit 1
+    elif [[ -t 0 ]]; then
+        prompt_reality_fingerprint relay_fingerprint "chrome"
+    else
+        log_error "No TTY for fingerprint prompt"
+        log_error "Use --fingerprint <value> or RELAY_FINGERPRINT env"
+        exit 1
+    fi
+
     # --- Step 2: Relay configuration ---
     log_info "=== Relay Configuration ==="
+    log_info "Reality fingerprint: $relay_fingerprint"
 
     local panel_port panel_path admin_user admin_pass domain
     panel_port=$(generate_random_port)
@@ -228,6 +259,7 @@ main() {
                     --arg exit_sni_val "$exit_sni" \
                     --arg exit_pubkey_val "$exit_pubkey" \
                     --arg exit_short_id_val "$exit_short_id" \
+                    --arg relay_fingerprint "$relay_fingerprint" \
                     '{
                         xPaddingBytes: $padding,
                         downloadSettings: {
@@ -240,7 +272,7 @@ main() {
                                 serverName: $exit_sni_val,
                                 publicKey: $exit_pubkey_val,
                                 shortId: $exit_short_id_val,
-                                fingerprint: "chrome",
+                                fingerprint: $relay_fingerprint,
                                 spiderX: "/"
                             }
                         }
@@ -251,7 +283,7 @@ main() {
 
             # Direct exit link — RAW + xtls-rprx-vision flow (matches main inbound).
             local direct_vless_link
-            direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=raw&security=reality&encryption=none&flow=xtls-rprx-vision&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&spx=%2F#Direct%20Exit"
+            direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=raw&security=reality&encryption=none&flow=xtls-rprx-vision&sni=${exit_sni}&fp=${relay_fingerprint}&pbk=${exit_pubkey}&sid=${exit_short_id}&spx=%2F#Direct%20Exit"
 
             # Hysteria 2 link — only when Hysteria is configured
             local hysteria_link=""
@@ -303,7 +335,7 @@ main() {
     x-ui stop
     bootstrap_api_token
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
-        "$exit_pubkey" "$exit_short_id" "$exit_sni"
+        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint"
     x-ui start
     log_ok "3X-UI started with template + API token loaded"
 
@@ -320,6 +352,7 @@ main() {
     create_3xui_relay_inbound "$relay_uuid" "$REALITY_PRIVATE_KEY" \
         "$REALITY_PUBLIC_KEY" "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
         "$default_sub_id" "$exit_ip" "$xver" "$relay_xhttp_path" \
+        "$relay_fingerprint" \
         || { log_error "Relay inbound/seed-client creation failed"; exit 1; }
 
     # --- Step 6: Security ---

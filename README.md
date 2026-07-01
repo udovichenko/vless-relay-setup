@@ -243,6 +243,7 @@ sudo ./scripts/setup.sh relay
 Exit server IP:                ← из шага 1
 Exit server UUID:              ← из шага 1
 ...
+Reality fingerprint (chrome,firefox,safari,edge,ios,android,random) [chrome]: ← TLS-отпечаток для новых ссылок
 Domain for SelfSteal SNI (Enter to skip): ← домен или Enter
 ```
 
@@ -366,6 +367,8 @@ sudo ./scripts/setup.sh update-relay
 
 При CDN Fallback `update-relay` автоматически синхронизирует CDN-ссылку с текущим exit UUID. Если UUID exit-сервера изменился — достаточно запустить `update-relay`, и подписки обновятся. Пользователям нужно только нажать "Обновить" в приложении.
 
+`update-relay` каждый раз спрашивает Reality fingerprint (по умолчанию — текущее значение из конфига relay). Выбранное значение применяется к relay inbound, Direct Exit и CDN-asymmetric ссылкам. Для неинтерактивного запуска используйте `--fingerprint` или `RELAY_FINGERPRINT`.
+
 Если Hysteria 2 был добавлен на exit после первоначальной настройки relay, передайте параметры через `update-relay`:
 
 ```bash
@@ -415,6 +418,7 @@ x-ui log
 | `--force` | setup, uninstall | Пропустить guard-проверку / подтверждение |
 | `--skip-ssh` | setup, update | Не менять конфигурацию SSH |
 | `--upgrade` | update | Обновить бинарники (XRAY, 3X-UI, Caddy) |
+| `--fingerprint` | relay, update-relay | Reality fingerprint: `chrome`, `firefox`, `safari`, `edge`, `ios`, `android`, `random` |
 | `--purge-certs` | uninstall | Удалить SSL-сертификаты и acme.sh |
 | `--hysteria-port` | update-relay | Порт Hysteria 2 на exit-сервере |
 | `--hysteria-port-end` | update-relay | Конец диапазона портов (по умолчанию port + 1000) |

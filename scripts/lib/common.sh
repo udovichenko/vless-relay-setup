@@ -90,6 +90,57 @@ validate_not_empty() {
     fi
 }
 
+REALITY_FINGERPRINT_OPTIONS=(chrome firefox safari edge ios android random)
+
+reality_fingerprint_options_csv() {
+    local IFS=,
+    echo "${REALITY_FINGERPRINT_OPTIONS[*]}"
+}
+
+validate_reality_fingerprint() {
+    local fingerprint="${1:-}"
+    local allowed
+    allowed=$(reality_fingerprint_options_csv)
+
+    if [[ -z "$fingerprint" ]]; then
+        log_error "Reality fingerprint cannot be empty"
+        log_error "Allowed values: $allowed"
+        return 1
+    fi
+
+    local opt
+    for opt in "${REALITY_FINGERPRINT_OPTIONS[@]}"; do
+        if [[ "$fingerprint" == "$opt" ]]; then
+            return 0
+        fi
+    done
+
+    log_error "Unsupported Reality fingerprint: $fingerprint"
+    log_error "Allowed values: $allowed"
+    return 1
+}
+
+prompt_reality_fingerprint() {
+    local var_name="$1"
+    local default_fingerprint="${2:-chrome}"
+    local input
+    local normalized
+
+    if ! validate_reality_fingerprint "$default_fingerprint" >/dev/null 2>&1; then
+        default_fingerprint="chrome"
+    fi
+
+    while true; do
+        prompt_input "Reality fingerprint ($(reality_fingerprint_options_csv))" input "$default_fingerprint"
+        normalized="${input,,}"
+        if validate_reality_fingerprint "$normalized" >/dev/null 2>&1; then
+            printf -v "$var_name" '%s' "$normalized"
+            return 0
+        fi
+        log_warn "Invalid fingerprint. Choose one of: $(reality_fingerprint_options_csv)"
+    done
+}
+
 generate_random_port() {
     local excluded_ports=("$@")
     local port
