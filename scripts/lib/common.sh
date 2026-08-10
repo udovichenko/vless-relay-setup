@@ -123,7 +123,8 @@ validate_reality_fingerprint() {
 prompt_reality_fingerprint() {
     local var_name="$1"
     local default_fingerprint="${2:-chrome}"
-    local input
+    # NB: must not collide with prompt_input's own locals (input/prompt/var_name/default)
+    local fp_reply=""
     local normalized
 
     if ! validate_reality_fingerprint "$default_fingerprint" >/dev/null 2>&1; then
@@ -131,8 +132,8 @@ prompt_reality_fingerprint() {
     fi
 
     while true; do
-        prompt_input "Reality fingerprint ($(reality_fingerprint_options_csv))" input "$default_fingerprint"
-        normalized="${input,,}"
+        prompt_input "Reality fingerprint ($(reality_fingerprint_options_csv))" fp_reply "$default_fingerprint"
+        normalized="${fp_reply,,}"
         if validate_reality_fingerprint "$normalized" >/dev/null 2>&1; then
             printf -v "$var_name" '%s' "$normalized"
             return 0
