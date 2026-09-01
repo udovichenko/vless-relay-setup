@@ -1,34 +1,55 @@
 {
-    "Name": "Split RU",
-    "GlobalProxy": "true",
-    "UseChunkFiles": "true",
-    "RemoteDNSType": "DoH",
-    "RemoteDNSDomain": "https://dns.adguard-dns.com/dns-query",
-    "RemoteDNSIP": "94.140.14.14",
-    "DomesticDNSType": "DoH",
-    "DomesticDNSDomain": "https://77.88.8.8/dns-query",
-    "DomesticDNSIP": "77.88.8.8",
-    "Geoipurl": "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat",
-    "Geositeurl": "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat",
-    "DnsHosts": {},
-    "RouteOrder": "block-proxy-direct",
-    "DirectSites": [
-        "geosite:private",
-        "geosite:category-ru"
-    ],
-    "DirectIp": [
-        "geoip:private",
-        "geoip:ru"
-    ],
-    "ProxySites": [
-        "geosite:youtube",
-        "geosite:telegram"
-    ],
-    "ProxyIp": [],
-    "BlockSites": [
-        "geosite:category-ads-all"
-    ],
-    "BlockIp": [],
-    "DomainStrategy": "IPIfNonMatch",
-    "FakeDNS": "false"
+  "Name": "RoscomVPN",
+  "GlobalProxy": "true",
+  "UseChunkFiles": "true",
+  "RemoteDns": "8.8.8.8",
+  "DomesticDns": "77.88.8.8",
+  "RemoteDNSType": "DoH",
+  "RemoteDNSDomain": "https://8.8.8.8/dns-query",
+  "RemoteDNSIP": "8.8.8.8",
+  "DomesticDNSType": "DoH",
+  "DomesticDNSDomain": "https://77.88.8.8/dns-query",
+  "DomesticDNSIP": "77.88.8.8",
+  "Geoipurl": "https://cdn.jsdelivr.net/gh/hydraponique/roscomvpn-geoip@202609010835/release/geoip.dat",
+  "Geositeurl": "https://cdn.jsdelivr.net/gh/hydraponique/roscomvpn-geosite@202604152235/release/geosite.dat",
+  "LastUpdated": "1788251781",
+  "DnsHosts": {
+    "lkfl2.nalog.ru": "213.24.64.175",
+    "lknpd.nalog.ru": "213.24.64.181"
+  },
+  "RouteOrder": "block-proxy-direct",
+  "DirectSites": [
+    "geosite:private",
+    "geosite:category-ru",
+    "geosite:whitelist",
+    "geosite:microsoft",
+    "geosite:apple",
+    "geosite:epicgames",
+    "geosite:riot",
+    "geosite:escapefromtarkov",
+    "geosite:steam",
+    "geosite:twitch",
+    "geosite:pinterest",
+    "geosite:faceit"
+  ],
+  "DirectIp": [
+    "geoip:private",
+    "geoip:direct"
+  ],
+  "ProxySites": [
+    "geosite:google-play",
+    "geosite:github",
+    "geosite:twitch-ads",
+    "geosite:youtube",
+    "geosite:telegram"
+  ],
+  "ProxyIp": [],
+  "BlockSites": [
+    "geosite:win-spy",
+    "geosite:torrent",
+    "geosite:category-ads"
+  ],
+  "BlockIp": [],
+  "DomainStrategy": "IPIfNonMatch",
+  "FakeDNS": "false"
 }

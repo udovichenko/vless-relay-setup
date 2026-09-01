@@ -10,7 +10,7 @@ base64-encoded subscription response.
 
 Split routing:
 - Shadowrocket Module: ?module=ru endpoint (.sgmodule file)
-- Happ: routing HTTP header with deeplink (auto-import on subscription update)
+- Happ/Incy: forward routing headers configured by 3X-UI
 - HTML page: inject download buttons for Shadowrocket module
 """
 
@@ -39,7 +39,6 @@ LISTEN_PORT = int(os.environ.get("SUB_PROXY_PORT", "18443"))
 CONF_DIR = os.environ.get("SR_CONF_DIR", "/etc/sub-proxy")
 
 SR_MODULE = ""
-HAPP_ROUTING_HEADER = ""
 
 # share-page (issue #21): один URL для подписки и для share-page,
 # браузер vs apps различаются по Accept-заголовку.
@@ -53,8 +52,8 @@ _share_page_template = None  # lazy-loaded; "" means "not available, don't retry
 
 
 def load_templates():
-    """Load Shadowrocket module and Happ routing profile at startup."""
-    global SR_MODULE, HAPP_ROUTING_HEADER
+    """Load the Shadowrocket module at startup."""
+    global SR_MODULE
 
     # Shadowrocket module
     module_path = os.path.join(CONF_DIR, "sr-module-ru.sgmodule")
@@ -63,17 +62,6 @@ def load_templates():
             SR_MODULE = f.read()
     except FileNotFoundError:
         pass
-
-    # Happ routing profile → deeplink header
-    happ_path = os.path.join(CONF_DIR, "happ-routing-ru.json")
-    try:
-        with open(happ_path) as f:
-            profile = f.read()
-        encoded = base64.b64encode(profile.encode()).decode()
-        HAPP_ROUTING_HEADER = f"happ://routing/onadd/{encoded}"
-    except FileNotFoundError:
-        pass
-
 
 HTML_SNIPPET = """\
 <div style="margin:24px auto;max-width:600px;padding:16px 20px;background:#f0f4f8;
@@ -209,6 +197,19 @@ def patch_relay_vless(line):
     return f"{line}&extra={RELAY_EXTRA}"
 
 
+def is_browser_request(accept, user_agent):
+    """Distinguish real browsers from VPN apps that also request text/html."""
+    return "text/html" in accept and "Mozilla" in user_agent
+
+
+def forward_routing_headers(handler, routing_enable, routing):
+    """Forward 3X-UI routing metadata unchanged for both Happ and Incy."""
+    if routing_enable:
+        handler.send_header("Routing-Enable", routing_enable)
+    if routing:
+        handler.send_header("Routing", routing)
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -232,7 +233,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         # — поэтому одного Accept мало. Реальный браузер ВСЕГДА содержит
         # "Mozilla" в UA (даже Safari/Edge/Chrome — все маскируются под него
         # с 90-х). Такого нет в UA app-клиентов.
-        is_browser = "text/html" in accept and "Mozilla" in ua
+        is_browser = is_browser_request(accept, ua)
 
         # Browser → /<subPath>/<subId> → отдаём share-page вместо 3X-UI HTML.
         # Используем parsed.path (без query/fragment) для матчинга — иначе
@@ -278,6 +279,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with urllib.request.urlopen(req, timeout=5) as resp:
                 body = resp.read()
                 ct = resp.headers.get("Content-Type", "text/plain")
+                routing = resp.headers.get("Routing", "")
+                routing_enable = resp.headers.get("Routing-Enable", "")
         except Exception:
             self.send_error(502, "Upstream unavailable")
             return
@@ -305,7 +308,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         # Subscription response (base64): patch 3X-UI relay link (inject extra=)
-        # + append CDN/Direct/Hysteria links + set Happ routing header.
+        # + append CDN/Direct/Hysteria links + forward Happ/Incy routing headers.
         extra_links = []
         if CDN_LINK_ASYM:
             extra_links.append(CDN_LINK_ASYM)
@@ -329,8 +332,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", ct)
-        if HAPP_ROUTING_HEADER:
-            self.send_header("routing", HAPP_ROUTING_HEADER)
+        forward_routing_headers(self, routing_enable, routing)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body if isinstance(body, bytes) else body.encode())
@@ -348,8 +350,6 @@ if __name__ == "__main__":
     loaded = []
     if SR_MODULE:
         loaded.append("Shadowrocket module")
-    if HAPP_ROUTING_HEADER:
-        loaded.append("Happ routing")
     if loaded:
         print(f"sub-proxy: loaded split routing: {', '.join(loaded)}")
     server = http.server.HTTPServer(("127.0.0.1", LISTEN_PORT), Handler)

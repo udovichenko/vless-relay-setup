@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/verify.sh"
 source "$SCRIPT_DIR/lib/selfcheck.sh"
 source "$SCRIPT_DIR/lib/xui-api.sh"
+source "$SCRIPT_DIR/lib/routing.sh"
 
 XRAY_CONFIG="/usr/local/etc/xray/config.json"
 XUI_DB="/etc/x-ui/x-ui.db"
@@ -135,6 +136,21 @@ run_selfcheck_relay() {
     else
         log_warn "3X-UI panel API not reachable / token invalid"
         _warns=$((_warns + 1))
+    fi
+
+    # Routing is global subscription metadata: every Happ/Incy subscription
+    # must receive one validated onadd profile without exposing it in logs.
+    local routing_enabled="" routing_rules="" normalized_routing=""
+    routing_enabled=$(sqlite3 "$XUI_DB" \
+        "SELECT value FROM settings WHERE key='subEnableRouting';" 2>/dev/null) || true
+    routing_rules=$(sqlite3 "$XUI_DB" \
+        "SELECT value FROM settings WHERE key='subRoutingRules';" 2>/dev/null) || true
+    normalized_routing=$(routing_normalize_payload "$routing_rules") || true
+    if [[ "$routing_enabled" == "true" && -n "$normalized_routing" ]]; then
+        log_ok "Happ/Incy subscription routing configured"
+    else
+        log_error "Happ/Incy subscription routing missing or invalid"
+        _fails=$((_fails + 1))
     fi
 
     log_info "=== Block 3 — outside probes ==="

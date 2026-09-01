@@ -9,12 +9,14 @@ source "$SCRIPT_DIR/lib/reality.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
 source "$SCRIPT_DIR/lib/xui-api.sh"
+source "$SCRIPT_DIR/lib/routing.sh"
 source "$SCRIPT_DIR/lib/verify.sh"
 source "$SCRIPT_DIR/lib/caddy.sh"
 
 main() {
     local force=false skip_ssh=false
     local relay_fingerprint_arg=""
+    local routing_source_arg=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --force) force=true ;;
@@ -28,6 +30,15 @@ main() {
                 shift
                 ;;
             --fingerprint=*) relay_fingerprint_arg="${1#*=}" ;;
+            --routing-source)
+                if [[ -z "${2:-}" ]]; then
+                    log_error "--routing-source requires a value"
+                    exit 1
+                fi
+                routing_source_arg="$2"
+                shift
+                ;;
+            --routing-source=*) routing_source_arg="${1#*=}" ;;
             *)
                 log_error "Unknown argument: $1"
                 exit 1
@@ -133,6 +144,14 @@ main() {
     log_info "=== Relay Configuration ==="
     log_info "Reality fingerprint: $relay_fingerprint"
 
+    if [[ -z "$routing_source_arg" ]]; then
+        if [[ -t 0 ]]; then
+            prompt_input "Happ/Incy routing source" routing_source_arg "$ROUTING_DEFAULT_SOURCE"
+        else
+            routing_source_arg="$ROUTING_DEFAULT_SOURCE"
+        fi
+    fi
+
     local panel_port panel_path admin_user admin_pass domain
     panel_port=$(generate_random_port)
     panel_path=$(generate_random_path)
@@ -185,6 +204,8 @@ main() {
     log_info "=== System Setup ==="
     update_system
     install_dependencies
+
+    routing_resolve_profile "$routing_source_arg" || exit 1
 
     # --- Step 4: Install XRAY (for key generation only) ---
     log_info "=== XRAY Setup ==="
@@ -348,9 +369,11 @@ main() {
     # do all inbound/client work via the live REST API (live gRPC, no restart needed).
     x-ui stop
     bootstrap_api_token
+    routing_apply_xui_settings
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
         "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint"
     x-ui start
+    routing_commit_profile_state
     log_ok "3X-UI started with template + API token loaded"
 
     # Wait for the panel API to come up before driving it.

@@ -121,9 +121,7 @@ Exit-нода использует AdGuard DNS для фильтрации ре�
   Сбер, Госуслуги, Яндекс, VK → напрямую (домашний IP)
 ```
 
-Настройка зависит от клиентского приложения — у каждого свой формат правил маршрутизации (пресеты, remote config, ручные правила). Для Shadowrocket sub-proxy отдаёт готовые конфиги по URL подписки с параметром `?conf=ru` (российские ресурсы напрямую) или `?conf=full` (весь трафик через VPN).
-
-Split routing не требует дополнительной настройки сервера — это функция клиентских приложений.
+Для Happ и Incy профиль RoscomVPN передаётся вместе с каждой подпиской: приложение импортирует и включает его автоматически. Для Shadowrocket sub-proxy отдаёт готовый модуль по URL подписки с `?module=ru`.
 
 ### Возможности
 
@@ -131,7 +129,7 @@ Split routing не требует дополнительной настройк�
 - **Многоуровневый CDN Fallback** — резервные маршруты через Cloudflare с асимметричным режимом
 - **Адаптивная защита соединений** — паддинг пакетов и мультиплексирование соединений
 - **Hysteria 2 (UDP)** — резервный канал с обфускацией Salamander и port hopping
-- **Split Routing** — раздельная маршрутизация: российские сервисы напрямую, остальное через VPN. Готовые конфиги для Shadowrocket (`?conf=ru`)
+- **Split Routing** — RoscomVPN автоматически вместе с подпиской Happ/Incy; готовый модуль Shadowrocket (`?module=ru`)
 - **3X-UI панель** — веб-интерфейс для управления пользователями, лимитами трафика и мониторинга
 - **Подписки** — автоматическое обновление конфигурации на клиентских устройствах
 - **SSH hardening + fail2ban + UFW** — автоматическая настройка безопасности серверов
@@ -281,9 +279,10 @@ Domain for subscriptions (Enter to skip):        ← поддомен для п�
 | Платформа | Приложение | Где скачать | Split routing |
 |-----------|-----------|------------|---------------|
 | Android | v2rayNG | [GitHub](https://github.com/2dust/v2rayNG) | Settings → Routing → preset Russia |
-| Android | Happ | [GitHub](https://github.com/Happ-proxy/happ-android) | Routing → добавить RU profile |
-| iOS | Shadowrocket | [App Store](https://apps.apple.com/app/shadowrocket/id932747118) | Config → Remote → `?conf=ru` |
-| iOS | Happ | [App Store](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215) | Routing → добавить RU profile |
+| Android | Happ | [GitHub](https://github.com/Happ-proxy/happ-android) | Автоматически из подписки |
+| Android / iOS | Incy | [Сайт](https://incy.cc) | Автоматически из подписки |
+| iOS | Shadowrocket | [App Store](https://apps.apple.com/app/shadowrocket/id932747118) | Remote Module → `?module=ru` |
+| iOS | Happ | [App Store](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215) | Автоматически из подписки |
 | iOS | Streisand | [App Store](https://apps.apple.com/app/streisand/id6450534064) | Routing rules в UI |
 | Windows | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
 | macOS | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
@@ -302,10 +301,11 @@ Domain for subscriptions (Enter to skip):        ← поддомен для п�
 2. Выбрать пресет Russia или импортировать правила
 3. Готово
 
-**Happ** (Android / iOS / десктоп):
-1. Открыть раздел Routing (меню ⊙ в правом верхнем углу)
-2. Включить «Use routing»
-3. Добавить profile — вручную или через deeplink с [roscomvpn-routing](https://github.com/hydraponique/roscomvpn-routing)
+**Happ / Incy** (Android / iOS / десктоп):
+
+1. Добавить subscription-ссылку как обычно.
+2. RoscomVPN routing-профиль импортируется и включается автоматически.
+3. Для уже добавленной подписки нажать «Обновить» и переподключиться.
 
 **Shadowrocket** (iOS):
 1. Добавить подписку как обычно (серверы)
@@ -379,6 +379,15 @@ sudo ./scripts/setup.sh update-relay
 
 `update-relay` каждый раз спрашивает Reality fingerprint (по умолчанию — текущее значение из конфига relay). Выбранное значение применяется к relay inbound, Direct Exit и CDN-asymmetric ссылкам. Для неинтерактивного запуска используйте `--fingerprint` или `RELAY_FINGERPRINT`.
 
+Happ/Incy routing-профиль обновляется из сохранённого HTTPS-источника при `relay` и `update-relay`. По умолчанию используется RoscomVPN DEFAULT. Обновить его отдельно или сменить источник:
+
+```bash
+sudo vpn routing update
+sudo vpn routing update --source https://example.com/routing.deeplink
+```
+
+Если источник временно недоступен или вернул невалидный профиль, relay сохранит последнюю рабочую копию.
+
 Если Hysteria 2 был добавлен на exit после первоначальной настройки relay, передайте параметры через `update-relay`:
 
 ```bash
@@ -429,6 +438,7 @@ x-ui log
 | `--skip-ssh` | setup, update | Не менять конфигурацию SSH |
 | `--upgrade` | update | Обновить бинарники (XRAY, 3X-UI, Caddy) |
 | `--fingerprint` | relay, update-relay | Reality fingerprint: `chrome`, `firefox`, `safari`, `edge`, `ios`, `android`, `random` |
+| `--routing-source` | relay, update-relay | HTTPS-источник JSON/deeplink-профиля Happ/Incy |
 | `--purge-certs` | uninstall | Удалить SSL-сертификаты и acme.sh |
 | `--hysteria-port` | update-relay | Порт Hysteria 2 на exit-сервере |
 | `--hysteria-port-end` | update-relay | Конец диапазона портов (по умолчанию port + 1000) |
