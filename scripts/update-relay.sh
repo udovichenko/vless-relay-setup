@@ -7,12 +7,15 @@ source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
 source "$SCRIPT_DIR/lib/xui-api.sh"
+source "$SCRIPT_DIR/lib/routing.sh"
 source "$SCRIPT_DIR/lib/verify.sh"
 source "$SCRIPT_DIR/lib/caddy.sh"
 
 main() {
     local upgrade=false skip_ssh=false
     local arg_hy_port="" arg_hy_port_end="" arg_hy_obfs=""
+    local arg_relay_fingerprint=""
+    local routing_source_arg=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --upgrade) upgrade=true ;;
@@ -20,6 +23,28 @@ main() {
             --hysteria-port) arg_hy_port="$2"; shift ;;
             --hysteria-port-end) arg_hy_port_end="$2"; shift ;;
             --hysteria-obfs) arg_hy_obfs="$2"; shift ;;
+            --fingerprint)
+                if [[ -z "${2:-}" ]]; then
+                    log_error "--fingerprint requires a value"
+                    exit 1
+                fi
+                arg_relay_fingerprint="$2"
+                shift
+                ;;
+            --fingerprint=*) arg_relay_fingerprint="${1#*=}" ;;
+            --routing-source)
+                if [[ -z "${2:-}" ]]; then
+                    log_error "--routing-source requires a value"
+                    exit 1
+                fi
+                routing_source_arg="$2"
+                shift
+                ;;
+            --routing-source=*) routing_source_arg="${1#*=}" ;;
+            *)
+                log_error "Unknown argument: $1"
+                exit 1
+                ;;
         esac
         shift
     done
@@ -66,7 +91,7 @@ main() {
         exit 1
     fi
 
-    local exit_ip exit_port exit_uuid exit_pubkey exit_short_id exit_sni api_port
+    local exit_ip exit_port exit_uuid exit_pubkey exit_short_id exit_sni api_port current_relay_fingerprint
     exit_ip=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .settings.vnext[0].address')
     exit_port=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .settings.vnext[0].port')
     exit_uuid=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .settings.vnext[0].users[0].id')
@@ -74,6 +99,7 @@ main() {
     exit_short_id=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .streamSettings.realitySettings.shortId')
     exit_sni=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .streamSettings.realitySettings.serverName')
     api_port=$(echo "$template" | jq -r '.inbounds[] | select(.tag=="api") | .port')
+    current_relay_fingerprint=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .streamSettings.realitySettings.fingerprint // empty')
 
     if [[ -z "$exit_ip" || "$exit_ip" == "null" ]]; then
         log_error "Failed to extract exit server details from template"
@@ -84,6 +110,27 @@ main() {
     log_info "  Exit:     $exit_ip:$exit_port"
     log_info "  SNI:      $exit_sni"
     log_info "  API port: $api_port"
+
+    local relay_fingerprint_default relay_fingerprint
+    relay_fingerprint_default="${current_relay_fingerprint:-firefox}"
+
+    if [[ -n "$arg_relay_fingerprint" ]]; then
+        relay_fingerprint="${arg_relay_fingerprint,,}"
+        validate_reality_fingerprint "$relay_fingerprint" || exit 1
+    elif [[ -n "${RELAY_FINGERPRINT:-}" ]]; then
+        relay_fingerprint="${RELAY_FINGERPRINT,,}"
+        validate_reality_fingerprint "$relay_fingerprint" || exit 1
+    elif [[ -t 0 ]]; then
+        prompt_reality_fingerprint relay_fingerprint "$relay_fingerprint_default"
+    else
+        log_error "No TTY for fingerprint prompt"
+        log_error "Use --fingerprint <value> or RELAY_FINGERPRINT env"
+        exit 1
+    fi
+
+    log_info "  Fingerprint: $relay_fingerprint"
+
+    routing_resolve_profile "$routing_source_arg" || exit 1
 
     # Read panel/subscription ports from DB
     local panel_port sub_port sub_enable
@@ -182,6 +229,12 @@ main() {
     # Bootstrap the REST API token while x-ui is stopped (loads fresh on the start
     # below; no later restart to flush it). Idempotent — reuses an existing valid token.
     bootstrap_api_token
+    if ! routing_apply_xui_settings; then
+        log_error "Failed to apply subscription routing; restoring DB backup..."
+        cp "$backup_path" "$XUI_DB"
+        x-ui start || true
+        exit 1
+    fi
 
     # Patch inbound sniffing to add routeOnly (idempotent — jq sets the field)
     local current_sniffing patched_sniffing
@@ -212,6 +265,7 @@ main() {
         # prevents fragility if the post-migration patch block is skipped/reordered.
         patched_stream=$(echo "$current_stream" | jq -c \
             --arg relay_path "$relay_xhttp_path" \
+            --arg relay_fingerprint "$relay_fingerprint" \
             --argjson extra "$extra_json" \
             '.network = "xhttp"
             | .xhttpSettings = {
@@ -219,6 +273,7 @@ main() {
                 mode: "auto",
                 extra: $extra
             }
+            | .realitySettings.settings = ((.realitySettings.settings // {}) + {fingerprint: $relay_fingerprint})
             | del(.tcpSettings)')
         local s_stream="${patched_stream//\'/\'\'}"
         sqlite3 "$XUI_DB" \
@@ -252,9 +307,11 @@ main() {
     if [[ -n "$current_inbound_stream" && \
           "$(echo "$current_inbound_stream" | jq -r '.network')" == "xhttp" ]]; then
         updated_inbound_stream=$(echo "$current_inbound_stream" | jq -c \
+            --arg relay_fingerprint "$relay_fingerprint" \
             --argjson extra "$extra_json" \
             --argjson lf "$lf_json" \
             '.xhttpSettings.extra = $extra
+            | .realitySettings.settings = ((.realitySettings.settings // {}) + {fingerprint: $relay_fingerprint})
             | .realitySettings += $lf')
         if [[ -z "$updated_inbound_stream" ]]; then
             log_error "jq failed to patch XHTTP extra/limitFallback on inbound (input malformed?)"
@@ -280,7 +337,7 @@ main() {
     fi
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
-        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$api_port"
+        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint" "$api_port"
 
     x-ui start
 
@@ -311,6 +368,13 @@ main() {
         exit 1
     fi
     log_ok "3X-UI restarted with updated template (xray bound :443)"
+    if ! routing_commit_profile_state; then
+        log_error "Failed to persist routing state; restoring DB backup..."
+        x-ui stop || true
+        cp "$backup_path" "$XUI_DB"
+        x-ui start || true
+        exit 1
+    fi
 
     # Re-assert the CDN client set via API. The upgrade seeder migrated relay clients
     # into the normalized tables; the CDN "-cdn" variants are ours to reconcile.
@@ -330,7 +394,7 @@ main() {
         mkdir -p /etc/sub-proxy
         # Refresh templates на existing relay'ях (issue #21 + cleanup стейлой sr-conf-*)
         install -m 0644 "$script_dir/lib/templates/sr-module-ru.sgmodule" /etc/sub-proxy/sr-module-ru.sgmodule
-        install -m 0644 "$script_dir/lib/templates/happ-routing-ru.json" /etc/sub-proxy/happ-routing-ru.json
+        rm -f /etc/sub-proxy/happ-routing-ru.json
         install -m 0644 "$script_dir/lib/templates/share-page.html" /etc/sub-proxy/share-page.html
 
         # Read CDN params — prefer dedicated env vars, fall back to old URL parsing
@@ -379,6 +443,7 @@ main() {
                     --arg sni "$exit_sni" \
                     --arg pubkey "$exit_pubkey" \
                     --arg sid "$exit_short_id" \
+                    --arg relay_fingerprint "$relay_fingerprint" \
                     '{
                         xPaddingBytes: $padding,
                         downloadSettings: {
@@ -387,7 +452,7 @@ main() {
                             flow: "xtls-rprx-vision",
                             realitySettings: {
                                 serverName: $sni, publicKey: $pubkey,
-                                shortId: $sid, fingerprint: "chrome",
+                                shortId: $sid, fingerprint: $relay_fingerprint,
                                 spiderX: "/"
                             }
                         }
@@ -397,7 +462,7 @@ main() {
             fi
 
             # Direct exit link — RAW + xtls-rprx-vision flow (matches main inbound).
-            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=raw&security=reality&encryption=none&flow=xtls-rprx-vision&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&spx=%2F#Direct%20Exit"
+            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=raw&security=reality&encryption=none&flow=xtls-rprx-vision&sni=${exit_sni}&fp=${relay_fingerprint}&pbk=${exit_pubkey}&sid=${exit_short_id}&spx=%2F#Direct%20Exit"
 
             # Hysteria 2 link — only when Hysteria is configured
             local hysteria_link=""

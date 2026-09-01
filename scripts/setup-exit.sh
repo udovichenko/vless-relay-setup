@@ -175,7 +175,7 @@ main() {
     # --- Step 4: Install 3X-UI ---
     log_info "=== 3X-UI Setup ==="
     install_3xui
-    configure_3xui "$panel_port" "$panel_path" "$admin_user" "$admin_pass"
+    configure_3xui "$panel_port" "$panel_path" "$admin_user" "$admin_pass" "127.0.0.1"
 
     # Start Caddy AFTER 3X-UI is installed, then add systemd dependency
     if [[ -n "$selfsteal_domain" ]]; then
@@ -197,11 +197,14 @@ main() {
     log_info "=== Security Setup ==="
     local security_args=()
     [[ "$skip_ssh" == true ]] && security_args+=("--skip-ssh")
-    security_args+=(--ssh-port "$ssh_port" "$ssh_port":SSH 443:XRAY "$panel_port:3X-UI Panel")
+    security_args+=(--ssh-port "$ssh_port" "$ssh_port":SSH 443:XRAY)
     if [[ -n "$selfsteal_domain" ]]; then
         security_args+=(80:Caddy-ACME)
     fi
+    # A --force reinstall may inherit the public panel rule from an older setup.
+    ufw delete allow "$panel_port"/tcp > /dev/null 2>&1 || true
     setup_security "${security_args[@]}"
+    log_ok "UFW: 3X-UI panel port ${panel_port} is not exposed"
     if [[ -n "$hysteria_port" ]]; then
         ufw allow "${hysteria_port}:${hysteria_port_end}/udp" comment "Hysteria2" > /dev/null 2>&1 || true
         log_ok "UFW: UDP ${hysteria_port}:${hysteria_port_end} opened for Hysteria 2"
@@ -264,9 +267,14 @@ EOF
         echo "  Hysteria2: UDP ${hysteria_port}-${hysteria_port_end} (Salamander)"
     fi
     echo ""
-    echo "  Panel:     http://${server_ip}:${panel_port}/${panel_path}/"
+    echo "  Panel:     http://127.0.0.1:${panel_port}/${panel_path}/ (SSH tunnel only)"
     echo "  User:      ${admin_user}"
     echo "  Password:  ${admin_pass}"
+    if [[ "$ssh_port" == "22" ]]; then
+        echo "  Tunnel:    ssh -L ${panel_port}:127.0.0.1:${panel_port} root@${server_ip}"
+    else
+        echo "  Tunnel:    ssh -p ${ssh_port} -L ${panel_port}:127.0.0.1:${panel_port} root@${server_ip}"
+    fi
     echo ""
     if [[ "$ssh_port" != "22" ]]; then
         echo "  SSH port:  ${ssh_port}"

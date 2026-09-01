@@ -14,6 +14,8 @@ source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
 # shellcheck source=lib/xui-api.sh
 source "$SCRIPT_DIR/lib/xui-api.sh"
+# shellcheck source=lib/routing.sh
+source "$SCRIPT_DIR/lib/routing.sh"
 
 XUI_DB="/etc/x-ui/x-ui.db"
 INBOUND_TAG="inbound-443"
@@ -28,6 +30,8 @@ Usage:
   vpn list                  таблица клиентов
   vpn link <name>           напечатать ссылку на подписку клиента
   vpn remove <name> [-f]    удалить клиента (с подтверждением; -f скипает)
+  vpn routing update [--source <https-url>]
+                            обновить Happ/Incy routing-профиль
   vpn help                  эта справка
 
 <name>: [a-zA-Z0-9_-]{1,32}, должно быть уникальным
@@ -218,6 +222,76 @@ cmd_remove() {
     log_ok "Removed client '$name'"
 }
 
+restore_routing_backup() {
+    local backup="$1"
+    log_warn "Restoring previous 3X-UI database..."
+    x-ui stop >/dev/null 2>&1 || true
+    cp "$backup" "$XUI_DB"
+    x-ui start >/dev/null 2>&1 || true
+    if wait_xray_listening; then
+        log_ok "Previous routing configuration restored"
+    else
+        log_error "Rollback completed, but xray is not listening; check 'x-ui log'"
+    fi
+}
+
+cmd_routing() {
+    local action="${1:-}"
+    shift || true
+    if [[ "$action" != "update" ]]; then
+        log_error "Usage: vpn routing update [--source <https-url>]"
+        exit 1
+    fi
+
+    local source=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --source)
+                [[ -n "${2:-}" ]] || { log_error "--source requires a value"; exit 1; }
+                source="$2"
+                shift 2
+                ;;
+            --source=*) source="${1#*=}"; shift ;;
+            *) log_error "Unknown routing argument: $1"; exit 1 ;;
+        esac
+    done
+
+    routing_resolve_profile "$source" || exit 1
+    if routing_xui_settings_current; then
+        routing_commit_profile_state
+        log_ok "Routing profile is already current; 3X-UI restart not needed"
+        return 0
+    fi
+
+    local backup
+    backup="${XUI_DB}.bak.routing.$(date +%Y%m%d-%H%M%S)"
+    cp "$XUI_DB" "$backup"
+    log_ok "Database backup saved: $backup"
+
+    x-ui stop
+    if ! routing_apply_xui_settings; then
+        restore_routing_backup "$backup"
+        exit 1
+    fi
+    if ! x-ui start; then
+        log_error "3X-UI failed to start after routing update"
+        restore_routing_backup "$backup"
+        exit 1
+    fi
+
+    if ! wait_xray_listening; then
+        log_error "xray failed after routing update"
+        restore_routing_backup "$backup"
+        exit 1
+    fi
+    if ! routing_commit_profile_state; then
+        log_error "Failed to persist routing profile state"
+        restore_routing_backup "$backup"
+        exit 1
+    fi
+    log_ok "Happ/Incy routing profile updated for all subscriptions"
+}
+
 main() {
     local cmd="${1:-help}"
     shift || true
@@ -227,6 +301,7 @@ main() {
         list)   require_relay; cmd_list "$@" ;;
         link)   require_relay; cmd_link "$@" ;;
         remove) require_relay; cmd_remove "$@" ;;
+        routing) require_relay; cmd_routing "$@" ;;
         help|-h|--help) usage ;;
         *)      log_error "Unknown command: $cmd"; usage; exit 1 ;;
     esac

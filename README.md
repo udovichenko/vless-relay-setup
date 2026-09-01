@@ -1,10 +1,10 @@
 # VLESS Reality Relay — Self-Hosted Encrypted Tunnel
 
-[![Latest release](https://img.shields.io/github/v/release/nozikov/vless-relay-setup)](https://github.com/nozikov/vless-relay-setup/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/nozikov/vless-relay-setup)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/udovichenko/vless-relay-setup)](https://github.com/udovichenko/vless-relay-setup/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/udovichenko/vless-relay-setup)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Debian%2012%20%7C%20Ubuntu%2022.04%2B-informational)](#требования)
 [![Made with Bash](https://img.shields.io/badge/made%20with-Bash-1f425f)](#)
-[![checks](https://github.com/nozikov/vless-relay-setup/actions/workflows/checks.yml/badge.svg)](https://github.com/nozikov/vless-relay-setup/actions/workflows/checks.yml)
+[![checks](https://github.com/udovichenko/vless-relay-setup/actions/workflows/checks.yml/badge.svg)](https://github.com/udovichenko/vless-relay-setup/actions/workflows/checks.yml)
 
 Двухзвенная relay-инфраструктура для зашифрованного соединения между узлами. Автоматическое развёртывание на два VPS-сервера.
 
@@ -121,9 +121,7 @@ Exit-нода использует AdGuard DNS для фильтрации ре�
   Сбер, Госуслуги, Яндекс, VK → напрямую (домашний IP)
 ```
 
-Настройка зависит от клиентского приложения — у каждого свой формат правил маршрутизации (пресеты, remote config, ручные правила). Для Shadowrocket sub-proxy отдаёт готовые конфиги по URL подписки с параметром `?conf=ru` (российские ресурсы напрямую) или `?conf=full` (весь трафик через VPN).
-
-Split routing не требует дополнительной настройки сервера — это функция клиентских приложений.
+Для Happ и Incy профиль RoscomVPN передаётся вместе с каждой подпиской: приложение импортирует и включает его автоматически. Для Shadowrocket sub-proxy отдаёт готовый модуль по URL подписки с `?module=ru`.
 
 ### Возможности
 
@@ -131,7 +129,7 @@ Split routing не требует дополнительной настройк�
 - **Многоуровневый CDN Fallback** — резервные маршруты через Cloudflare с асимметричным режимом
 - **Адаптивная защита соединений** — паддинг пакетов и мультиплексирование соединений
 - **Hysteria 2 (UDP)** — резервный канал с обфускацией Salamander и port hopping
-- **Split Routing** — раздельная маршрутизация: российские сервисы напрямую, остальное через VPN. Готовые конфиги для Shadowrocket (`?conf=ru`)
+- **Split Routing** — RoscomVPN автоматически вместе с подпиской Happ/Incy; готовый модуль Shadowrocket (`?module=ru`)
 - **3X-UI панель** — веб-интерфейс для управления пользователями, лимитами трафика и мониторинга
 - **Подписки** — автоматическое обновление конфигурации на клиентских устройствах
 - **SSH hardening + fail2ban + UFW** — автоматическая настройка безопасности серверов
@@ -187,7 +185,7 @@ ssh-copy-id root@<IP-сервера>
 
 ```bash
 apt-get update && apt-get install -y git
-git clone https://github.com/nozikov/vless-relay-setup.git && cd vless-relay-setup
+git clone https://github.com/udovichenko/vless-relay-setup.git && cd vless-relay-setup
 chmod +x scripts/*.sh scripts/lib/*.sh
 sudo ./scripts/setup.sh exit
 ```
@@ -226,11 +224,16 @@ Hysteria 2 UDP port (Enter to skip):      ← порт для Hysteria 2 или 
 
 Эти значения также сохраняются в `/root/exit-server-info.txt`.
 
+Панель 3X-UI на exit-ноде используется только для диагностики. Она слушает
+`127.0.0.1`, её порт не открывается в UFW. Для доступа создайте SSH-туннель
+командой, которую установщик выводит в итоговой сводке, и откройте указанный
+локальный URL `http://127.0.0.1:<порт>/<путь>/`.
+
 ### Шаг 2. Relay-сервер
 
 ```bash
 apt-get update && apt-get install -y git
-git clone https://github.com/nozikov/vless-relay-setup.git && cd vless-relay-setup
+git clone https://github.com/udovichenko/vless-relay-setup.git && cd vless-relay-setup
 chmod +x scripts/*.sh scripts/lib/*.sh
 sudo ./scripts/setup.sh relay
 ```
@@ -243,8 +246,14 @@ sudo ./scripts/setup.sh relay
 Exit server IP:                ← из шага 1
 Exit server UUID:              ← из шага 1
 ...
+Connection name in subscriptions (Enter for automatic city names): ← например `ARNY RU → NL`
+Reality fingerprint (chrome,firefox,safari,edge,ios,android,random) [firefox]: ← TLS-отпечаток для новых ссылок
 Domain for SelfSteal SNI (Enter to skip): ← домен или Enter
 ```
+
+Это имя отображается у основного подключения в Happ, Shadowrocket и других
+клиентах. Пустой ответ сохраняет автоматическое название по городам. Для
+неинтерактивной установки используйте переменную `RELAY_CONNECTION_NAME`.
 
 При включении SelfSteal дополнительно:
 
@@ -270,9 +279,10 @@ Domain for subscriptions (Enter to skip):        ← поддомен для п�
 | Платформа | Приложение | Где скачать | Split routing |
 |-----------|-----------|------------|---------------|
 | Android | v2rayNG | [GitHub](https://github.com/2dust/v2rayNG) | Settings → Routing → preset Russia |
-| Android | Happ | [GitHub](https://github.com/Happ-proxy/happ-android) | Routing → добавить RU profile |
-| iOS | Shadowrocket | [App Store](https://apps.apple.com/app/shadowrocket/id932747118) | Config → Remote → `?conf=ru` |
-| iOS | Happ | [App Store](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215) | Routing → добавить RU profile |
+| Android | Happ | [GitHub](https://github.com/Happ-proxy/happ-android) | Автоматически из подписки |
+| Android / iOS | Incy | [Сайт](https://incy.cc) | Автоматически из подписки |
+| iOS | Shadowrocket | [App Store](https://apps.apple.com/app/shadowrocket/id932747118) | Remote Module → `?module=ru` |
+| iOS | Happ | [App Store](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215) | Автоматически из подписки |
 | iOS | Streisand | [App Store](https://apps.apple.com/app/streisand/id6450534064) | Routing rules в UI |
 | Windows | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
 | macOS | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
@@ -291,10 +301,11 @@ Domain for subscriptions (Enter to skip):        ← поддомен для п�
 2. Выбрать пресет Russia или импортировать правила
 3. Готово
 
-**Happ** (Android / iOS / десктоп):
-1. Открыть раздел Routing (меню ⊙ в правом верхнем углу)
-2. Включить «Use routing»
-3. Добавить profile — вручную или через deeplink с [roscomvpn-routing](https://github.com/hydraponique/roscomvpn-routing)
+**Happ / Incy** (Android / iOS / десктоп):
+
+1. Добавить subscription-ссылку как обычно.
+2. RoscomVPN routing-профиль импортируется и включается автоматически.
+3. Для уже добавленной подписки нажать «Обновить» и переподключиться.
 
 **Shadowrocket** (iOS):
 1. Добавить подписку как обычно (серверы)
@@ -366,6 +377,17 @@ sudo ./scripts/setup.sh update-relay
 
 При CDN Fallback `update-relay` автоматически синхронизирует CDN-ссылку с текущим exit UUID. Если UUID exit-сервера изменился — достаточно запустить `update-relay`, и подписки обновятся. Пользователям нужно только нажать "Обновить" в приложении.
 
+`update-relay` каждый раз спрашивает Reality fingerprint (по умолчанию — текущее значение из конфига relay). Выбранное значение применяется к relay inbound, Direct Exit и CDN-asymmetric ссылкам. Для неинтерактивного запуска используйте `--fingerprint` или `RELAY_FINGERPRINT`.
+
+Happ/Incy routing-профиль обновляется из сохранённого HTTPS-источника при `relay` и `update-relay`. По умолчанию используется RoscomVPN DEFAULT. Обновить его отдельно или сменить источник:
+
+```bash
+sudo vpn routing update
+sudo vpn routing update --source https://example.com/routing.deeplink
+```
+
+Если источник временно недоступен или вернул невалидный профиль, relay сохранит последнюю рабочую копию.
+
 Если Hysteria 2 был добавлен на exit после первоначальной настройки relay, передайте параметры через `update-relay`:
 
 ```bash
@@ -415,6 +437,8 @@ x-ui log
 | `--force` | setup, uninstall | Пропустить guard-проверку / подтверждение |
 | `--skip-ssh` | setup, update | Не менять конфигурацию SSH |
 | `--upgrade` | update | Обновить бинарники (XRAY, 3X-UI, Caddy) |
+| `--fingerprint` | relay, update-relay | Reality fingerprint: `chrome`, `firefox`, `safari`, `edge`, `ios`, `android`, `random` |
+| `--routing-source` | relay, update-relay | HTTPS-источник JSON/deeplink-профиля Happ/Incy |
 | `--purge-certs` | uninstall | Удалить SSL-сертификаты и acme.sh |
 | `--hysteria-port` | update-relay | Порт Hysteria 2 на exit-сервере |
 | `--hysteria-port-end` | update-relay | Конец диапазона портов (по умолчанию port + 1000) |
@@ -426,8 +450,8 @@ x-ui log
 |-----------|----------|
 | SSH | Только ключевая аутентификация, пароли отключены, опциональная смена порта |
 | fail2ban | Блокировка IP после 3 неудачных попыток SSH на 1 час |
-| UFW | Открыты только необходимые порты (SSH, 443, панель) |
-| 3X-UI | Случайный порт + секретный URL-путь |
+| UFW | Открыты только необходимые порты; порт exit-панели закрыт |
+| 3X-UI | Exit: только `127.0.0.1` через SSH-туннель; relay: случайный порт + секретный URL-путь |
 | Reality | TLS 1.3 с маскировкой SNI под легитимный домен |
 | SelfSteal | Реальный сайт на вашем домене — полное соответствие SNI, IP, сертификата |
 | Routing | Блокировка доступа к приватным подсетям (RFC 1918) через туннель |

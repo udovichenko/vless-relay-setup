@@ -273,7 +273,7 @@ setup_sub_proxy() {
     install -m 0755 "$script_dir/sub-proxy.py" /usr/local/bin/sub-proxy.py
     mkdir -p /etc/sub-proxy
     install -m 0644 "$script_dir/templates/sr-module-ru.sgmodule" /etc/sub-proxy/sr-module-ru.sgmodule
-    install -m 0644 "$script_dir/templates/happ-routing-ru.json" /etc/sub-proxy/happ-routing-ru.json
+    rm -f /etc/sub-proxy/happ-routing-ru.json
 
     # share-page.html: smoke-check шаблона перед install (placeholder'ы должны быть)
     local share_src="$script_dir/templates/share-page.html"

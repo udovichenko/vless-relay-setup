@@ -226,6 +226,11 @@ The script outputs connection parameters at the end — **save them** for relay 
 
 These values are also saved to `/root/exit-server-info.txt`.
 
+The 3X-UI panel on an exit node is diagnostic only. It listens on `127.0.0.1`
+and its port is not opened in UFW. To access it, create the SSH tunnel printed
+in the installer's final summary, then open the displayed local URL
+`http://127.0.0.1:<port>/<path>/`.
+
 ### Step 2. Relay Server
 
 ```bash
@@ -243,8 +248,14 @@ The script will ask for exit server parameters (from step 1), then panel setting
 Exit server IP:                ← from step 1
 Exit server UUID:              ← from step 1
 ...
+Connection name in subscriptions (Enter for automatic city names): ← e.g. `ARNY RU → NL`
+Reality fingerprint (chrome,firefox,safari,edge,ios,android,random) [chrome]: ← TLS fingerprint for new links
 Domain for SelfSteal SNI (Enter to skip): ← domain or Enter
 ```
+
+This name is shown for the primary connection in Happ, Shadowrocket, and other
+clients. An empty answer keeps the automatic city-based name. For unattended
+setup, use the `RELAY_CONNECTION_NAME` environment variable.
 
 With SelfSteal enabled, additionally:
 
@@ -366,6 +377,8 @@ Keys, UUIDs, clients, and statistics are **preserved**. Only the configuration t
 
 With CDN Fallback, `update-relay` automatically syncs the CDN link with the current exit UUID. If the exit UUID changes — just run `update-relay`, and subscriptions will update. Users only need to refresh the subscription in their app.
 
+`update-relay` asks for the Reality fingerprint on each run (default is the current relay value). The selected value is applied to relay inbound, Direct Exit links, and CDN asymmetric links. For non-interactive runs, use `--fingerprint` or `RELAY_FINGERPRINT`.
+
 To update binaries (XRAY, 3X-UI, Caddy), add `--upgrade`:
 
 ```bash
@@ -404,6 +417,7 @@ x-ui log
 | `--force` | setup, uninstall | Skip guard check / confirmation |
 | `--skip-ssh` | setup, update | Don't modify SSH configuration |
 | `--upgrade` | update | Update binaries (XRAY, 3X-UI, Caddy) |
+| `--fingerprint` | relay, update-relay | Reality fingerprint: `chrome`, `firefox`, `safari`, `edge`, `ios`, `android`, `random` |
 | `--purge-certs` | uninstall | Remove SSL certificates and acme.sh |
 
 ## Security
@@ -412,8 +426,8 @@ x-ui log
 |-----------|-------------|
 | SSH | Key-only authentication, passwords disabled, optional port change |
 | fail2ban | IP ban after 3 failed SSH attempts for 1 hour |
-| UFW | Only required ports open (SSH, 443, panel) |
-| 3X-UI | Random port + secret URL path |
+| UFW | Only required ports open; the exit panel port stays closed |
+| 3X-UI | Exit: `127.0.0.1` via SSH tunnel only; relay: random port + secret URL path |
 | Reality | TLS 1.3 with SNI masking to a legitimate domain |
 | SelfSteal | Real website on your domain — full SNI/IP/certificate consistency |
 | Routing | Private subnet access blocked (RFC 1918) through the tunnel |

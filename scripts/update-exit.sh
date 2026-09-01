@@ -142,7 +142,7 @@ main() {
     log_info "  DNS mode: $dns_mode"
     log_info "  WARP:     $warp_enabled"
 
-    # Read panel port from 3X-UI DB (for UFW and verification)
+    # Read the diagnostic panel port so an old public UFW rule can be removed.
     local panel_port=""
     if [[ -f "$XUI_DB" ]]; then
         panel_port=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webPort';" 2>/dev/null) || true
@@ -275,6 +275,12 @@ main() {
 
     # --- Step 6: Security ---
     log_info "=== Security ==="
+
+    # The exit XRAY is standalone; its 3X-UI panel is diagnostic only. Keep it
+    # on loopback and omit its port from UFW. This also migrates older installs
+    # that exposed the panel publicly (with or without an expired IP cert).
+    restrict_3xui_to_localhost
+
     local ssh_port
     ssh_port=$(grep -E '^Port ' /etc/ssh/sshd_config 2>/dev/null | head -1 | awk '{print $2}') || true
     ssh_port="${ssh_port:-22}"
@@ -283,13 +289,16 @@ main() {
     local security_args=()
     [[ "$skip_ssh" == true ]] && security_args+=("--skip-ssh")
     security_args+=(--ssh-port "$ssh_port" "$ssh_port":SSH 443:XRAY)
-    if [[ -n "$panel_port" ]]; then
-        security_args+=("$panel_port:3X-UI Panel")
-    fi
     if [[ "$is_selfsteal" == true ]]; then
         security_args+=(80:Caddy-ACME)
     fi
+    if [[ -n "$panel_port" ]]; then
+        ufw delete allow "$panel_port"/tcp > /dev/null 2>&1 || true
+    fi
     setup_security "${security_args[@]}"
+    if [[ -n "$panel_port" ]]; then
+        log_ok "UFW: 3X-UI panel port ${panel_port} is not exposed"
+    fi
     if [[ "$is_hysteria" == true ]]; then
         local hy_port hy_port_end
         hy_port=$(grep -oP '(?<=^listen: :)\d+' "$HYSTERIA_CONFIG") || true
