@@ -248,9 +248,14 @@ sudo ./scripts/setup.sh relay
 Exit server IP:                ← из шага 1
 Exit server UUID:              ← из шага 1
 ...
+Connection name in subscriptions (Enter for automatic city names): ← например `ARNY RU → NL`
 Reality fingerprint (chrome,firefox,safari,edge,ios,android,random) [chrome]: ← TLS-отпечаток для новых ссылок
 Domain for SelfSteal SNI (Enter to skip): ← домен или Enter
 ```
+
+Это имя отображается у основного подключения в Happ, Shadowrocket и других
+клиентах. Пустой ответ сохраняет автоматическое название по городам. Для
+неинтерактивной установки используйте переменную `RELAY_CONNECTION_NAME`.
 
 При включении SelfSteal дополнительно:
 

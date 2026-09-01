@@ -100,6 +100,20 @@ main() {
     validate_not_empty "$exit_short_id" "Exit short ID" || exit 1
     validate_not_empty "$exit_sni" "Exit SNI" || exit 1
 
+    # This becomes the VLESS link name shown by subscription clients (Happ,
+    # Shadowrocket, etc.). Empty keeps the existing city-based auto name.
+    local relay_connection_name="${RELAY_CONNECTION_NAME:-}"
+    if [[ -z "$relay_connection_name" ]]; then
+        prompt_input "Connection name in subscriptions (Enter for automatic city names)" relay_connection_name ""
+    else
+        log_info "Connection name: $relay_connection_name (RELAY_CONNECTION_NAME env)"
+    fi
+    if [[ ${#relay_connection_name} -gt 64 || "$relay_connection_name" == *$'\n'* || "$relay_connection_name" == *$'\r'* ]]; then
+        log_error "Connection name must be a single line of at most 64 characters"
+        exit 1
+    fi
+    export RELAY_CONNECTION_NAME="$relay_connection_name"
+
     local relay_fingerprint=""
     if [[ -n "$relay_fingerprint_arg" ]]; then
         relay_fingerprint="${relay_fingerprint_arg,,}"
