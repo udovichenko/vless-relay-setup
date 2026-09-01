@@ -226,6 +226,11 @@ The script outputs connection parameters at the end — **save them** for relay 
 
 These values are also saved to `/root/exit-server-info.txt`.
 
+The 3X-UI panel on an exit node is diagnostic only. It listens on `127.0.0.1`
+and its port is not opened in UFW. To access it, create the SSH tunnel printed
+in the installer's final summary, then open the displayed local URL
+`http://127.0.0.1:<port>/<path>/`.
+
 ### Step 2. Relay Server
 
 ```bash
@@ -412,8 +417,8 @@ x-ui log
 |-----------|-------------|
 | SSH | Key-only authentication, passwords disabled, optional port change |
 | fail2ban | IP ban after 3 failed SSH attempts for 1 hour |
-| UFW | Only required ports open (SSH, 443, panel) |
-| 3X-UI | Random port + secret URL path |
+| UFW | Only required ports open; the exit panel port stays closed |
+| 3X-UI | Exit: `127.0.0.1` via SSH tunnel only; relay: random port + secret URL path |
 | Reality | TLS 1.3 with SNI masking to a legitimate domain |
 | SelfSteal | Real website on your domain — full SNI/IP/certificate consistency |
 | Routing | Private subnet access blocked (RFC 1918) through the tunnel |

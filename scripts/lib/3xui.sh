@@ -99,6 +99,7 @@ configure_3xui() {
     local panel_path="$2"
     local admin_user="$3"
     local admin_pass="$4"
+    local panel_listen="${5:-}"
 
     log_info "Configuring 3X-UI panel..."
 
@@ -116,12 +117,44 @@ configure_3xui() {
     # Set admin credentials
     "$XUI_BIN" setting -username "$admin_user" -password "$admin_pass"
 
+    # Exit panels are diagnostic only. Allow callers to keep them off the
+    # public network while relay panels retain their existing behaviour.
+    if [[ -n "$panel_listen" ]]; then
+        xui_db_set "webListen" "$panel_listen"
+    fi
+
     # Start with new settings
     x-ui start
 
     log_ok "3X-UI configured:"
-    log_info "  URL: http://<server-ip>:${panel_port}/${panel_path}/"
+    if [[ "$panel_listen" == "127.0.0.1" ]]; then
+        log_info "  URL: http://127.0.0.1:${panel_port}/${panel_path}/ (SSH tunnel only)"
+    else
+        log_info "  URL: http://<server-ip>:${panel_port}/${panel_path}/"
+    fi
     log_info "  User: $admin_user"
+}
+
+# Migrate an existing panel to local-only access. Stop x-ui before touching
+# the DB: otherwise its in-memory settings are written back on shutdown and
+# overwrite the change.
+restrict_3xui_to_localhost() {
+    if ! command -v x-ui &> /dev/null || [[ ! -f "$XUI_DB" ]]; then
+        log_warn "3X-UI not found; skipping local-only panel migration"
+        return 0
+    fi
+
+    local current_listen
+    current_listen=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webListen';" 2>/dev/null) || true
+    if [[ "$current_listen" == "127.0.0.1" ]]; then
+        log_ok "3X-UI panel already restricted to 127.0.0.1"
+        return 0
+    fi
+
+    x-ui stop
+    xui_db_set "webListen" "127.0.0.1"
+    x-ui start
+    log_ok "3X-UI panel restricted to 127.0.0.1 (SSH tunnel only)"
 }
 
 configure_3xui_relay_template() {
