@@ -132,7 +132,24 @@ configure_3xui_relay_template() {
     local exit_short_id="$5"
     local exit_sni="$6"
 
-    local api_port="${7:-$(shuf -i 10000-60000 -n1)}"
+    local relay_fingerprint="chrome"
+    local api_port=""
+    if [[ -n "${8:-}" ]]; then
+        relay_fingerprint="${7:-chrome}"
+        api_port="$8"
+    elif [[ -n "${7:-}" ]]; then
+        if [[ "${7}" =~ ^[0-9]+$ ]]; then
+            api_port="$7"
+        else
+            relay_fingerprint="$7"
+        fi
+    fi
+    api_port="${api_port:-$(shuf -i 10000-60000 -n1)}"
+
+    if ! validate_reality_fingerprint "$relay_fingerprint" >/dev/null 2>&1; then
+        log_error "Invalid relay fingerprint for template: $relay_fingerprint"
+        return 1
+    fi
 
     log_info "Writing xray template config to 3X-UI database..."
 
@@ -147,6 +164,7 @@ configure_3xui_relay_template() {
         --arg exit_pubkey "$exit_pubkey" \
         --arg exit_short_id "$exit_short_id" \
         --arg exit_sni "$exit_sni" \
+        --arg relay_fingerprint "$relay_fingerprint" \
         --argjson api_port "$api_port" \
         --argjson extra "$extra_json" \
         '{
@@ -198,7 +216,7 @@ configure_3xui_relay_template() {
                         security: "reality",
                         realitySettings: {
                             show: false,
-                            fingerprint: "chrome",
+                            fingerprint: $relay_fingerprint,
                             serverName: $exit_sni,
                             publicKey: $exit_pubkey,
                             shortId: $exit_short_id
@@ -266,6 +284,12 @@ create_3xui_relay_inbound() {
     local exit_ip="${8:-}"
     local xver="${9:-0}"
     local relay_xhttp_path="${10:-$(generate_random_path)}"
+    local relay_fingerprint="${11:-chrome}"
+
+    if ! validate_reality_fingerprint "$relay_fingerprint" >/dev/null 2>&1; then
+        log_error "Invalid relay fingerprint for inbound: $relay_fingerprint"
+        return 1
+    fi
 
     local relay_city exit_city remark
     relay_city=$(curl -s --max-time 3 "http://ip-api.com/json/?fields=city" | jq -r '.city // empty') || true
@@ -287,6 +311,7 @@ create_3xui_relay_inbound() {
         --arg short_id "$short_id" \
         --arg dest "$dest" \
         --arg server_name "$server_name" \
+        --arg relay_fingerprint "$relay_fingerprint" \
         --argjson xver "$xver" \
         --arg relay_path "$relay_xhttp_path" \
         --argjson extra "$extra_json" \
@@ -302,7 +327,7 @@ create_3xui_relay_inbound() {
                 privateKey: $private_key,
                 publicKey: $public_key,
                 shortIds: [$short_id],
-                settings: { publicKey: $public_key, fingerprint: "chrome", spiderX: "" }
+                settings: { publicKey: $public_key, fingerprint: $relay_fingerprint, spiderX: "" }
             } + $lf),
             xhttpSettings: { path: ("/"+$relay_path), mode: "auto", extra: $extra }
         }')

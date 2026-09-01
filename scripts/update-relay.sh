@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/lib/caddy.sh"
 main() {
     local upgrade=false skip_ssh=false
     local arg_hy_port="" arg_hy_port_end="" arg_hy_obfs=""
+    local arg_relay_fingerprint=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --upgrade) upgrade=true ;;
@@ -20,6 +21,19 @@ main() {
             --hysteria-port) arg_hy_port="$2"; shift ;;
             --hysteria-port-end) arg_hy_port_end="$2"; shift ;;
             --hysteria-obfs) arg_hy_obfs="$2"; shift ;;
+            --fingerprint)
+                if [[ -z "${2:-}" ]]; then
+                    log_error "--fingerprint requires a value"
+                    exit 1
+                fi
+                arg_relay_fingerprint="$2"
+                shift
+                ;;
+            --fingerprint=*) arg_relay_fingerprint="${1#*=}" ;;
+            *)
+                log_error "Unknown argument: $1"
+                exit 1
+                ;;
         esac
         shift
     done
@@ -66,7 +80,7 @@ main() {
         exit 1
     fi
 
-    local exit_ip exit_port exit_uuid exit_pubkey exit_short_id exit_sni api_port
+    local exit_ip exit_port exit_uuid exit_pubkey exit_short_id exit_sni api_port current_relay_fingerprint
     exit_ip=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .settings.vnext[0].address')
     exit_port=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .settings.vnext[0].port')
     exit_uuid=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .settings.vnext[0].users[0].id')
@@ -74,6 +88,7 @@ main() {
     exit_short_id=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .streamSettings.realitySettings.shortId')
     exit_sni=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .streamSettings.realitySettings.serverName')
     api_port=$(echo "$template" | jq -r '.inbounds[] | select(.tag=="api") | .port')
+    current_relay_fingerprint=$(echo "$template" | jq -r '.outbounds[] | select(.tag=="proxy-exit") | .streamSettings.realitySettings.fingerprint // empty')
 
     if [[ -z "$exit_ip" || "$exit_ip" == "null" ]]; then
         log_error "Failed to extract exit server details from template"
@@ -84,6 +99,25 @@ main() {
     log_info "  Exit:     $exit_ip:$exit_port"
     log_info "  SNI:      $exit_sni"
     log_info "  API port: $api_port"
+
+    local relay_fingerprint_default relay_fingerprint
+    relay_fingerprint_default="${current_relay_fingerprint:-chrome}"
+
+    if [[ -n "$arg_relay_fingerprint" ]]; then
+        relay_fingerprint="${arg_relay_fingerprint,,}"
+        validate_reality_fingerprint "$relay_fingerprint" || exit 1
+    elif [[ -n "${RELAY_FINGERPRINT:-}" ]]; then
+        relay_fingerprint="${RELAY_FINGERPRINT,,}"
+        validate_reality_fingerprint "$relay_fingerprint" || exit 1
+    elif [[ -t 0 ]]; then
+        prompt_reality_fingerprint relay_fingerprint "$relay_fingerprint_default"
+    else
+        log_error "No TTY for fingerprint prompt"
+        log_error "Use --fingerprint <value> or RELAY_FINGERPRINT env"
+        exit 1
+    fi
+
+    log_info "  Fingerprint: $relay_fingerprint"
 
     # Read panel/subscription ports from DB
     local panel_port sub_port sub_enable
@@ -212,6 +246,7 @@ main() {
         # prevents fragility if the post-migration patch block is skipped/reordered.
         patched_stream=$(echo "$current_stream" | jq -c \
             --arg relay_path "$relay_xhttp_path" \
+            --arg relay_fingerprint "$relay_fingerprint" \
             --argjson extra "$extra_json" \
             '.network = "xhttp"
             | .xhttpSettings = {
@@ -219,6 +254,7 @@ main() {
                 mode: "auto",
                 extra: $extra
             }
+            | .realitySettings.settings = ((.realitySettings.settings // {}) + {fingerprint: $relay_fingerprint})
             | del(.tcpSettings)')
         local s_stream="${patched_stream//\'/\'\'}"
         sqlite3 "$XUI_DB" \
@@ -252,9 +288,11 @@ main() {
     if [[ -n "$current_inbound_stream" && \
           "$(echo "$current_inbound_stream" | jq -r '.network')" == "xhttp" ]]; then
         updated_inbound_stream=$(echo "$current_inbound_stream" | jq -c \
+            --arg relay_fingerprint "$relay_fingerprint" \
             --argjson extra "$extra_json" \
             --argjson lf "$lf_json" \
             '.xhttpSettings.extra = $extra
+            | .realitySettings.settings = ((.realitySettings.settings // {}) + {fingerprint: $relay_fingerprint})
             | .realitySettings += $lf')
         if [[ -z "$updated_inbound_stream" ]]; then
             log_error "jq failed to patch XHTTP extra/limitFallback on inbound (input malformed?)"
@@ -280,7 +318,7 @@ main() {
     fi
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
-        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$api_port"
+        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint" "$api_port"
 
     x-ui start
 
@@ -379,6 +417,7 @@ main() {
                     --arg sni "$exit_sni" \
                     --arg pubkey "$exit_pubkey" \
                     --arg sid "$exit_short_id" \
+                    --arg relay_fingerprint "$relay_fingerprint" \
                     '{
                         xPaddingBytes: $padding,
                         downloadSettings: {
@@ -387,7 +426,7 @@ main() {
                             flow: "xtls-rprx-vision",
                             realitySettings: {
                                 serverName: $sni, publicKey: $pubkey,
-                                shortId: $sid, fingerprint: "chrome",
+                                shortId: $sid, fingerprint: $relay_fingerprint,
                                 spiderX: "/"
                             }
                         }
@@ -397,7 +436,7 @@ main() {
             fi
 
             # Direct exit link — RAW + xtls-rprx-vision flow (matches main inbound).
-            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=raw&security=reality&encryption=none&flow=xtls-rprx-vision&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&spx=%2F#Direct%20Exit"
+            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=raw&security=reality&encryption=none&flow=xtls-rprx-vision&sni=${exit_sni}&fp=${relay_fingerprint}&pbk=${exit_pubkey}&sid=${exit_short_id}&spx=%2F#Direct%20Exit"
 
             # Hysteria 2 link — only when Hysteria is configured
             local hysteria_link=""

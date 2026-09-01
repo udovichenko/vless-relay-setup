@@ -243,6 +243,7 @@ The script will ask for exit server parameters (from step 1), then panel setting
 Exit server IP:                ← from step 1
 Exit server UUID:              ← from step 1
 ...
+Reality fingerprint (chrome,firefox,safari,edge,ios,android,random) [chrome]: ← TLS fingerprint for new links
 Domain for SelfSteal SNI (Enter to skip): ← domain or Enter
 ```
 
@@ -366,6 +367,8 @@ Keys, UUIDs, clients, and statistics are **preserved**. Only the configuration t
 
 With CDN Fallback, `update-relay` automatically syncs the CDN link with the current exit UUID. If the exit UUID changes — just run `update-relay`, and subscriptions will update. Users only need to refresh the subscription in their app.
 
+`update-relay` asks for the Reality fingerprint on each run (default is the current relay value). The selected value is applied to relay inbound, Direct Exit links, and CDN asymmetric links. For non-interactive runs, use `--fingerprint` or `RELAY_FINGERPRINT`.
+
 To update binaries (XRAY, 3X-UI, Caddy), add `--upgrade`:
 
 ```bash
@@ -404,6 +407,7 @@ x-ui log
 | `--force` | setup, uninstall | Skip guard check / confirmation |
 | `--skip-ssh` | setup, update | Don't modify SSH configuration |
 | `--upgrade` | update | Update binaries (XRAY, 3X-UI, Caddy) |
+| `--fingerprint` | relay, update-relay | Reality fingerprint: `chrome`, `firefox`, `safari`, `edge`, `ios`, `android`, `random` |
 | `--purge-certs` | uninstall | Remove SSL certificates and acme.sh |
 
 ## Security
