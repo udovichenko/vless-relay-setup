@@ -1,10 +1,10 @@
 # VLESS Reality Relay — Self-Hosted Encrypted Tunnel
 
-[![Latest release](https://img.shields.io/github/v/release/nozikov/vless-relay-setup)](https://github.com/nozikov/vless-relay-setup/releases/latest)
-[![License: MIT](https://img.shields.io/github/license/nozikov/vless-relay-setup)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/udovichenko/vless-relay-setup)](https://github.com/udovichenko/vless-relay-setup/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/udovichenko/vless-relay-setup)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Debian%2012%20%7C%20Ubuntu%2022.04%2B-informational)](#требования)
 [![Made with Bash](https://img.shields.io/badge/made%20with-Bash-1f425f)](#)
-[![checks](https://github.com/nozikov/vless-relay-setup/actions/workflows/checks.yml/badge.svg)](https://github.com/nozikov/vless-relay-setup/actions/workflows/checks.yml)
+[![checks](https://github.com/udovichenko/vless-relay-setup/actions/workflows/checks.yml/badge.svg)](https://github.com/udovichenko/vless-relay-setup/actions/workflows/checks.yml)
 
 Двухзвенная relay-инфраструктура для зашифрованного соединения между узлами. Автоматическое развёртывание на два VPS-сервера.
 
@@ -185,7 +185,7 @@ ssh-copy-id root@<IP-сервера>
 
 ```bash
 apt-get update && apt-get install -y git
-git clone https://github.com/nozikov/vless-relay-setup.git && cd vless-relay-setup
+git clone https://github.com/udovichenko/vless-relay-setup.git && cd vless-relay-setup
 chmod +x scripts/*.sh scripts/lib/*.sh
 sudo ./scripts/setup.sh exit
 ```
@@ -233,7 +233,7 @@ Hysteria 2 UDP port (Enter to skip):      ← порт для Hysteria 2 или 
 
 ```bash
 apt-get update && apt-get install -y git
-git clone https://github.com/nozikov/vless-relay-setup.git && cd vless-relay-setup
+git clone https://github.com/udovichenko/vless-relay-setup.git && cd vless-relay-setup
 chmod +x scripts/*.sh scripts/lib/*.sh
 sudo ./scripts/setup.sh relay
 ```
