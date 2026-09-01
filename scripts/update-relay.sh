@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
 source "$SCRIPT_DIR/lib/xui-api.sh"
+source "$SCRIPT_DIR/lib/routing.sh"
 source "$SCRIPT_DIR/lib/verify.sh"
 source "$SCRIPT_DIR/lib/caddy.sh"
 
@@ -14,6 +15,7 @@ main() {
     local upgrade=false skip_ssh=false
     local arg_hy_port="" arg_hy_port_end="" arg_hy_obfs=""
     local arg_relay_fingerprint=""
+    local routing_source_arg=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --upgrade) upgrade=true ;;
@@ -30,6 +32,15 @@ main() {
                 shift
                 ;;
             --fingerprint=*) arg_relay_fingerprint="${1#*=}" ;;
+            --routing-source)
+                if [[ -z "${2:-}" ]]; then
+                    log_error "--routing-source requires a value"
+                    exit 1
+                fi
+                routing_source_arg="$2"
+                shift
+                ;;
+            --routing-source=*) routing_source_arg="${1#*=}" ;;
             *)
                 log_error "Unknown argument: $1"
                 exit 1
@@ -118,6 +129,8 @@ main() {
     fi
 
     log_info "  Fingerprint: $relay_fingerprint"
+
+    routing_resolve_profile "$routing_source_arg" || exit 1
 
     # Read panel/subscription ports from DB
     local panel_port sub_port sub_enable
@@ -216,6 +229,12 @@ main() {
     # Bootstrap the REST API token while x-ui is stopped (loads fresh on the start
     # below; no later restart to flush it). Idempotent — reuses an existing valid token.
     bootstrap_api_token
+    if ! routing_apply_xui_settings; then
+        log_error "Failed to apply subscription routing; restoring DB backup..."
+        cp "$backup_path" "$XUI_DB"
+        x-ui start || true
+        exit 1
+    fi
 
     # Patch inbound sniffing to add routeOnly (idempotent — jq sets the field)
     local current_sniffing patched_sniffing
@@ -349,6 +368,13 @@ main() {
         exit 1
     fi
     log_ok "3X-UI restarted with updated template (xray bound :443)"
+    if ! routing_commit_profile_state; then
+        log_error "Failed to persist routing state; restoring DB backup..."
+        x-ui stop || true
+        cp "$backup_path" "$XUI_DB"
+        x-ui start || true
+        exit 1
+    fi
 
     # Re-assert the CDN client set via API. The upgrade seeder migrated relay clients
     # into the normalized tables; the CDN "-cdn" variants are ours to reconcile.
@@ -368,7 +394,7 @@ main() {
         mkdir -p /etc/sub-proxy
         # Refresh templates на existing relay'ях (issue #21 + cleanup стейлой sr-conf-*)
         install -m 0644 "$script_dir/lib/templates/sr-module-ru.sgmodule" /etc/sub-proxy/sr-module-ru.sgmodule
-        install -m 0644 "$script_dir/lib/templates/happ-routing-ru.json" /etc/sub-proxy/happ-routing-ru.json
+        rm -f /etc/sub-proxy/happ-routing-ru.json
         install -m 0644 "$script_dir/lib/templates/share-page.html" /etc/sub-proxy/share-page.html
 
         # Read CDN params — prefer dedicated env vars, fall back to old URL parsing

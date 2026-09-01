@@ -81,3 +81,8 @@ jobs:
         run: python3 tests/invariants/validate-templates.py
       - name: validate-urls (VLESS/Hysteria URL format)
         run: python3 tests/invariants/validate-urls.py
+      - name: routing profile and sub-proxy propagation
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+          bash tests/invariants/test-routing.sh
+          python3 tests/invariants/test_sub_proxy_routing.py
