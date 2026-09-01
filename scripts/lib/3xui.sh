@@ -267,12 +267,15 @@ create_3xui_relay_inbound() {
     local xver="${9:-0}"
     local relay_xhttp_path="${10:-$(generate_random_path)}"
 
-    local relay_city exit_city remark
-    relay_city=$(curl -s --max-time 3 "http://ip-api.com/json/?fields=city" | jq -r '.city // empty') || true
-    if [[ -n "$exit_ip" ]]; then
-        exit_city=$(curl -s --max-time 3 "http://ip-api.com/json/${exit_ip}?fields=city" | jq -r '.city // empty') || true
+    local relay_city exit_city remark="${RELAY_CONNECTION_NAME:-}"
+    if [[ -z "$remark" ]]; then
+        relay_city=$(curl -s --max-time 3 "http://ip-api.com/json/?fields=city" | jq -r '.city // empty') || true
+        if [[ -n "$exit_ip" ]]; then
+            exit_city=$(curl -s --max-time 3 "http://ip-api.com/json/${exit_ip}?fields=city" | jq -r '.city // empty') || true
+        fi
+        remark="${relay_city:-Relay} → ${exit_city:-Exit}"
     fi
-    remark="${relay_city:-Relay} → ${exit_city:-Exit}"
+    log_info "Subscription connection name: $remark"
 
     # Inbound is created WITHOUT clients; the seed client is added via the API
     # (clients/add) so it lands in the normalized clients/client_inbounds tables.

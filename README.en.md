@@ -243,8 +243,13 @@ The script will ask for exit server parameters (from step 1), then panel setting
 Exit server IP:                ← from step 1
 Exit server UUID:              ← from step 1
 ...
+Connection name in subscriptions (Enter for automatic city names): ← e.g. `ARNY RU → NL`
 Domain for SelfSteal SNI (Enter to skip): ← domain or Enter
 ```
+
+This name is shown for the primary connection in Happ, Shadowrocket, and other
+clients. An empty answer keeps the automatic city-based name. For unattended
+setup, use the `RELAY_CONNECTION_NAME` environment variable.
 
 With SelfSteal enabled, additionally:
 
