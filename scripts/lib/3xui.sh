@@ -132,10 +132,10 @@ configure_3xui_relay_template() {
     local exit_short_id="$5"
     local exit_sni="$6"
 
-    local relay_fingerprint="chrome"
+    local relay_fingerprint="firefox"
     local api_port=""
     if [[ -n "${8:-}" ]]; then
-        relay_fingerprint="${7:-chrome}"
+        relay_fingerprint="${7:-firefox}"
         api_port="$8"
     elif [[ -n "${7:-}" ]]; then
         if [[ "${7}" =~ ^[0-9]+$ ]]; then
@@ -284,7 +284,7 @@ create_3xui_relay_inbound() {
     local exit_ip="${8:-}"
     local xver="${9:-0}"
     local relay_xhttp_path="${10:-$(generate_random_path)}"
-    local relay_fingerprint="${11:-chrome}"
+    local relay_fingerprint="${11:-firefox}"
 
     if ! validate_reality_fingerprint "$relay_fingerprint" >/dev/null 2>&1; then
         log_error "Invalid relay fingerprint for inbound: $relay_fingerprint"

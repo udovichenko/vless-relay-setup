@@ -108,7 +108,7 @@ main() {
         relay_fingerprint="${RELAY_FINGERPRINT,,}"
         validate_reality_fingerprint "$relay_fingerprint" || exit 1
     elif [[ -t 0 ]]; then
-        prompt_reality_fingerprint relay_fingerprint "chrome"
+        prompt_reality_fingerprint relay_fingerprint "firefox"
     else
         log_error "No TTY for fingerprint prompt"
         log_error "Use --fingerprint <value> or RELAY_FINGERPRINT env"

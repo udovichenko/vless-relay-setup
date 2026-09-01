@@ -122,13 +122,13 @@ validate_reality_fingerprint() {
 
 prompt_reality_fingerprint() {
     local var_name="$1"
-    local default_fingerprint="${2:-chrome}"
+    local default_fingerprint="${2:-firefox}"
     # NB: must not collide with prompt_input's own locals (input/prompt/var_name/default)
     local fp_reply=""
     local normalized
 
     if ! validate_reality_fingerprint "$default_fingerprint" >/dev/null 2>&1; then
-        default_fingerprint="chrome"
+        default_fingerprint="firefox"
     fi
 
     while true; do
