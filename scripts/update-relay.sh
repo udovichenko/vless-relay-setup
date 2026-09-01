@@ -101,7 +101,7 @@ main() {
     log_info "  API port: $api_port"
 
     local relay_fingerprint_default relay_fingerprint
-    relay_fingerprint_default="${current_relay_fingerprint:-chrome}"
+    relay_fingerprint_default="${current_relay_fingerprint:-firefox}"
 
     if [[ -n "$arg_relay_fingerprint" ]]; then
         relay_fingerprint="${arg_relay_fingerprint,,}"

@@ -12,7 +12,7 @@ show_usage() {
     echo "                 Use --force to reinstall even if already configured"
     echo "  relay        — Setup relay node (entry point for users)"
     echo "                 Use --force to reinstall even if already configured"
-    echo "                 Use --fingerprint to set Reality fingerprint (default: chrome)"
+    echo "                 Use --fingerprint to set Reality fingerprint (default: firefox)"
     echo "  update-exit  — Update exit server config from latest codebase"
     echo "                 Use --upgrade to also update XRAY and 3X-UI binaries"
     echo "                 Use --enable-warp/--disable-warp for AI WARP outbound"
