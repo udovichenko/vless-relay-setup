@@ -24,6 +24,7 @@ jobs:
             scripts/uninstall.sh \
             scripts/selfcheck.sh \
             scripts/vpn \
+            scripts/netprobe.sh \
             scripts/lib/*.sh
 
   ruff:
