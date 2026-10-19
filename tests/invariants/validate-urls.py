@@ -16,9 +16,14 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+# netprobe.sh parses user-supplied links instead of generating them, so its
+# help text and case patterns contain placeholders, not URL templates.
+EXCLUDED = {'netprobe.sh'}
+
 SHELL_FILES = sorted(
-    list((REPO_ROOT / 'scripts').glob('*.sh'))
+    p for p in list((REPO_ROOT / 'scripts').glob('*.sh'))
     + list((REPO_ROOT / 'scripts' / 'lib').glob('*.sh'))
+    if p.name not in EXCLUDED
 )
 
 DUMMY_UUID = '00000000-0000-0000-0000-000000000000'

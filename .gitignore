@@ -6,3 +6,7 @@ __pycache__/
 docs/superpowers/
 .worktrees/
 .tmp-*
+
+# netprobe reports (contain server IPs)
+netprobe-*.txt
+netprobe-*.json

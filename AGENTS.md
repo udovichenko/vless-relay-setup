@@ -282,7 +282,7 @@ HEAD-метод: `BaseHTTPRequestHandler` НЕ подавляет body для HE
 
 `VERSION` file in repo root is the single source of truth. `common.sh` reads it into `PROJECT_VERSION`. All scripts display version in their banner. Bump version only when script behavior changes (not for docs/README changes).
 
-This repository is an independently released fork. Stable fork releases use the upstream base version plus a monotonically increasing `-du.N` suffix, for example `1.11.1-du.1` and Git tag `v1.11.1-du.1`. Do not use project/customer names in version suffixes.
+This repository is developed independently of upstream (originally forked from it). Stable releases use the upstream base version plus a monotonically increasing `-du.N` suffix, for example `1.11.1-du.1` and Git tag `v1.11.1-du.1`. Do not use project/customer names in version suffixes.
 
 ## Code Conventions
 
@@ -324,7 +324,8 @@ Both have the repo cloned at `~/vless-relay-setup/`.
 
 ### Git branches and remotes
 
-- `origin` is this private fork; `upstream` is the source repository and is reference-only unless the user explicitly asks to interact with it.
+- `origin` is this **public**, standalone repository (detached from the upstream fork network; no contributions go upstream). `upstream` is the original project and is reference-only unless the user explicitly asks to interact with it.
+- Because the repo is public, the "No infra leakage in public" rule applies to every commit, not only to issues/PRs/README.
 - `main` is the stable release branch. Deploy shared/production servers from an annotated release tag on `main`, not from a moving development branch.
 - `dev` is the integration branch. Start normal work from `dev`, merge completed work back with `--no-ff`, and promote tested `dev` to `main` for a release.
 - Never commit feature work directly to `main`.
