@@ -16,10 +16,13 @@ main() {
     local arg_hy_port="" arg_hy_port_end="" arg_hy_obfs=""
     local arg_relay_fingerprint=""
     local routing_source_arg=""
+    local ru_routing_arg="" ru_routing=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --upgrade) upgrade=true ;;
             --skip-ssh) skip_ssh=true ;;
+            --enable-ru-routing) ru_routing_arg=true ;;
+            --disable-ru-routing) ru_routing_arg=false ;;
             --hysteria-port) arg_hy_port="$2"; shift ;;
             --hysteria-port-end) arg_hy_port_end="$2"; shift ;;
             --hysteria-obfs) arg_hy_obfs="$2"; shift ;;
@@ -107,6 +110,14 @@ main() {
     fi
 
     log_ok "Current config read successfully"
+    if relay_ru_routing_enabled "$template"; then
+        ru_routing=true
+    fi
+    ru_routing="${ru_routing_arg:-$ru_routing}"
+    if [[ "$ru_routing" == true ]]; then
+        validate_relay_ru_routing || exit 1
+    fi
+    log_info "  Server-side RU routing: $ru_routing"
     log_info "  Exit:     $exit_ip:$exit_port"
     log_info "  SNI:      $exit_sni"
     log_info "  API port: $api_port"
@@ -337,7 +348,7 @@ main() {
     fi
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
-        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint" "$api_port"
+        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint" "$api_port" "$ru_routing"
 
     x-ui start
 

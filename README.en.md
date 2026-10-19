@@ -111,7 +111,22 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
 
 ![DNS filtering](./docs/dns-filtering.svg)
 
-### Split Routing
+### Relay-side routing
+
+For a relay with a Russian IP, enable server-side routing using
+`sudo ./scripts/setup.sh update-relay --enable-ru-routing --fingerprint firefox`.
+Russian domains (`geosite:category-ru`, `.ru`, `.su`, `.рф`) and `geoip:ru`
+addresses use the relay IP; other traffic uses the exit. Private IPs are blocked.
+`IPOnDemand` resolves domains with the relay DNS for IP-based rules. The installed
+core checks the required geodata before stopping x-ui. Updates preserve this mode;
+`--disable-ru-routing` restores exit-only routing. Fresh `relay` installations
+accept the same flags; server routing is off by default.
+
+Client routing still runs first. A client `DIRECT` rule uses the device ISP.
+To get a Russian IP from abroad, send Russian destinations through the VPN
+(or disable client split routing). Direct Exit, CDN and Hysteria bypass the relay.
+
+### Client Split Routing
 
 Some regional services (banking, government portals, local marketplaces) may not work correctly when accessed via VPN with a foreign IP. Split routing solves this — regional traffic goes direct, everything else through VPN.
 
