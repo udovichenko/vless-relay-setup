@@ -28,6 +28,8 @@ show_usage() {
     echo "                 Use --purge-warp to also remove cloudflare-warp"
     echo ""
     echo "  All commands accept --skip-ssh to skip SSH hardening"
+    echo "  relay/update-relay accept --enable-ru-routing/--disable-ru-routing"
+    echo "    RU destinations exit via relay; other traffic uses exit (opt-in)"
     echo ""
     echo "Deploy EXIT server first, then RELAY server."
 }

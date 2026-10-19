@@ -50,6 +50,14 @@ Hysteria 2 (optional, requires SelfSteal):
 **Exit server**: XRAY runs as systemd service, config in `/usr/local/etc/xray/config.json`.
 **Relay server**: 3X-UI manages its own XRAY process, config stored in SQLite at `/etc/x-ui/x-ui.db`.
 
+**Optional relay RU routing**: `relay` / `update-relay --enable-ru-routing` routes
+`geosite:category-ru`, `.ru/.su/.рф`, and `geoip:ru` via relay's `direct` outbound;
+private IPs are blocked, remaining traffic uses `proxy-exit`. Uses `IPOnDemand`
+because the inbound catch-all prevents `IPIfNonMatch` from resolving domains.
+Updates detect/preserve the mode in the template; `--disable-ru-routing` disables it.
+The installed core validates geodata before x-ui is stopped. Client DIRECT still
+bypasses the relay entirely; server routing applies only to relay-channel traffic.
+
 Setup order is always exit first, then relay (relay needs exit server's keys/UUID).
 
 ### Subscription Channels (full SelfSteal + CDN + Hysteria deployment)

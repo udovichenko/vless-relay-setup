@@ -111,7 +111,34 @@ Exit-нода использует AdGuard DNS для фильтрации ре�
 
 ![DNS-фильтрация](./docs/dns-filtering.svg)
 
-### Split Routing (раздельная маршрутизация)
+### Маршрутизация на реле
+
+Для реле с российским IP можно включить серверное разделение трафика:
+
+```bash
+sudo ./scripts/setup.sh update-relay --enable-ru-routing --fingerprint firefox
+```
+
+Домены из `geosite:category-ru`, зоны `.ru`, `.su`, `.рф` и адреса из
+`geoip:ru` выходят через `direct` с IP реле. Остальной трафик идёт через
+`proxy-exit`; приватные IP блокируются. Для IP-правил используется
+`IPOnDemand`, поэтому реле разрешает домены через свой DNS. Классификация
+зависит от установленных `geoip.dat` и `geosite.dat`; перед изменением
+проверяется, что Xray может загрузить нужные категории.
+
+Режим сохраняется при последующих `update-relay`. Отключение:
+`update-relay --disable-ru-routing --fingerprint firefox`. При новой
+установке флаг `--enable-ru-routing` можно передать команде `relay`.
+По умолчанию весь трафик продолжает идти через exit.
+
+Клиентские правила работают перед серверными: `DIRECT` в Happ означает
+выход через провайдера устройства. Чтобы за границей получить российский
+IP, отключите клиентский split routing или отправляйте российские сайты
+через VPN. Российские пользователи могут оставить локальный split routing.
+Серверные правила применяются только к каналу через реле; Direct Exit,
+CDN и Hysteria обходят реле.
+
+### Split Routing в клиенте (раздельная маршрутизация)
 
 Некоторые российские сервисы (банки, госсервисы, маркетплейсы) могут некорректно работать при подключении с иностранного IP-адреса. Split routing решает эту проблему: трафик к российским ресурсам идёт напрямую через домашнего провайдера, а всё остальное — через VPN.
 
@@ -439,6 +466,7 @@ x-ui log
 | `--upgrade` | update | Обновить бинарники (XRAY, 3X-UI, Caddy) |
 | `--fingerprint` | relay, update-relay | Reality fingerprint: `chrome`, `firefox`, `safari`, `edge`, `ios`, `android`, `random` |
 | `--routing-source` | relay, update-relay | HTTPS-источник JSON/deeplink-профиля Happ/Incy |
+| `--enable-ru-routing` / `--disable-ru-routing` | relay, update-relay | Российские ресурсы через IP реле; update сохраняет выбранный режим |
 | `--purge-certs` | uninstall | Удалить SSL-сертификаты и acme.sh |
 | `--hysteria-port` | update-relay | Порт Hysteria 2 на exit-сервере |
 | `--hysteria-port-end` | update-relay | Конец диапазона портов (по умолчанию port + 1000) |

@@ -157,6 +157,52 @@ restrict_3xui_to_localhost() {
     log_ok "3X-UI panel restricted to 127.0.0.1 (SSH tunnel only)"
 }
 
+# Detect our opt-in server routing from the persisted template, so updates keep it.
+relay_ru_routing_enabled() {
+    jq -e 'any(.routing.rules[]?;
+        .outboundTag == "direct" and
+        ((.domain // []) | index("geosite:category-ru")) != null)' >/dev/null <<< "$1"
+}
+
+relay_routing_config() {
+    local ru_routing="${1:-false}"
+    if [[ "$ru_routing" != true && "$ru_routing" != false ]]; then
+        log_error "Invalid relay RU routing mode: $ru_routing" >&2
+        return 1
+    fi
+    jq -nc --argjson ru "$ru_routing" '{
+        rules: [{type: "field", inboundTag: ["api"], outboundTag: "api"}]
+    } | if $ru then
+        # IPOnDemand is required: the final inbound catch-all would otherwise
+        # match before IPIfNonMatch ever resolved a domain for geoip rules.
+        .domainStrategy = "IPOnDemand" |
+        .rules += [
+            {type: "field", ip: ["geoip:private"], outboundTag: "block"},
+            {type: "field", domain: ["geosite:category-ru", "domain:ru",
+                "domain:su", "domain:xn--p1ai"], outboundTag: "direct"},
+            {type: "field", ip: ["geoip:ru"], outboundTag: "direct"}
+        ]
+    else . end |
+    .rules += [{type: "field", inboundTag: ["inbound-443"], outboundTag: "proxy-exit"}]'
+}
+
+# Check geodata with the installed core before entering the x-ui stop window.
+validate_relay_ru_routing() {
+    local xray_bin="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/bin"
+    local core config
+    core=$(find "$xray_bin" -maxdepth 1 -type f -name 'xray-linux-*' -print -quit)
+    if [[ -z "$core" || ! -x "$core" ]]; then
+        log_error "Installed 3X-UI Xray core not found in $xray_bin"
+        return 1
+    fi
+    config=$(relay_routing_config true | jq -c '{
+        routing: (. | .rules |= map(select(.outboundTag != "api"))),
+        outbounds: [{tag: "proxy-exit", protocol: "freedom"},
+            {tag: "direct", protocol: "freedom"}, {tag: "block", protocol: "blackhole"}]
+    }')
+    XRAY_LOCATION_ASSET="$xray_bin" "$core" run -test -config stdin: <<< "$config"
+}
+
 configure_3xui_relay_template() {
     local exit_ip="$1"
     local exit_port="$2"
@@ -164,6 +210,7 @@ configure_3xui_relay_template() {
     local exit_pubkey="$4"
     local exit_short_id="$5"
     local exit_sni="$6"
+    local ru_routing="${9:-false}"
 
     local relay_fingerprint="firefox"
     local api_port=""
@@ -186,8 +233,9 @@ configure_3xui_relay_template() {
 
     log_info "Writing xray template config to 3X-UI database..."
 
-    local extra_json
+    local extra_json routing_json
     extra_json=$(xhttp_extra_json)
+    routing_json=$(relay_routing_config "$ru_routing") || return 1
 
     local template
     template=$(jq -n -c \
@@ -200,6 +248,7 @@ configure_3xui_relay_template() {
         --arg relay_fingerprint "$relay_fingerprint" \
         --argjson api_port "$api_port" \
         --argjson extra "$extra_json" \
+        --argjson routing "$routing_json" \
         '{
             log: {
                 loglevel: "warning",
@@ -280,20 +329,7 @@ configure_3xui_relay_template() {
                     }
                 }
             ],
-            routing: {
-                rules: [
-                    {
-                        type: "field",
-                        inboundTag: ["api"],
-                        outboundTag: "api"
-                    },
-                    {
-                        type: "field",
-                        inboundTag: ["inbound-443"],
-                        outboundTag: "proxy-exit"
-                    }
-                ]
-            }
+            routing: $routing
         }')
 
     mkdir -p /var/log/xray
