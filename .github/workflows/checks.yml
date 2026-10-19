@@ -24,6 +24,7 @@ jobs:
             scripts/uninstall.sh \
             scripts/selfcheck.sh \
             scripts/vpn \
+            scripts/netprobe.sh \
             scripts/lib/*.sh
 
   ruff:
@@ -85,4 +86,5 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y jq
           bash tests/invariants/test-routing.sh
+          bash tests/invariants/test-relay-routing.sh
           python3 tests/invariants/test_sub_proxy_routing.py

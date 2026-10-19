@@ -50,6 +50,14 @@ Hysteria 2 (optional, requires SelfSteal):
 **Exit server**: XRAY runs as systemd service, config in `/usr/local/etc/xray/config.json`.
 **Relay server**: 3X-UI manages its own XRAY process, config stored in SQLite at `/etc/x-ui/x-ui.db`.
 
+**Optional relay RU routing**: `relay` / `update-relay --enable-ru-routing` routes
+`geosite:category-ru`, `.ru/.su/.рф`, and `geoip:ru` via relay's `direct` outbound;
+private IPs are blocked, remaining traffic uses `proxy-exit`. Uses `IPOnDemand`
+because the inbound catch-all prevents `IPIfNonMatch` from resolving domains.
+Updates detect/preserve the mode in the template; `--disable-ru-routing` disables it.
+The installed core validates geodata before x-ui is stopped. Client DIRECT still
+bypasses the relay entirely; server routing applies only to relay-channel traffic.
+
 Setup order is always exit first, then relay (relay needs exit server's keys/UUID).
 
 ### Subscription Channels (full SelfSteal + CDN + Hysteria deployment)
@@ -274,7 +282,7 @@ HEAD-метод: `BaseHTTPRequestHandler` НЕ подавляет body для HE
 
 `VERSION` file in repo root is the single source of truth. `common.sh` reads it into `PROJECT_VERSION`. All scripts display version in their banner. Bump version only when script behavior changes (not for docs/README changes).
 
-This repository is an independently released fork. Stable fork releases use the upstream base version plus a monotonically increasing `-du.N` suffix, for example `1.11.1-du.1` and Git tag `v1.11.1-du.1`. Do not use project/customer names in version suffixes.
+This repository is developed independently of upstream (originally forked from it). Stable releases use the upstream base version plus a monotonically increasing `-du.N` suffix, for example `1.11.1-du.1` and Git tag `v1.11.1-du.1`. Do not use project/customer names in version suffixes.
 
 ## Code Conventions
 
@@ -316,7 +324,8 @@ Both have the repo cloned at `~/vless-relay-setup/`.
 
 ### Git branches and remotes
 
-- `origin` is this private fork; `upstream` is the source repository and is reference-only unless the user explicitly asks to interact with it.
+- `origin` is this **public**, standalone repository (detached from the upstream fork network; no contributions go upstream). `upstream` is the original project and is reference-only unless the user explicitly asks to interact with it.
+- Because the repo is public, the "No infra leakage in public" rule applies to every commit, not only to issues/PRs/README.
 - `main` is the stable release branch. Deploy shared/production servers from an annotated release tag on `main`, not from a moving development branch.
 - `dev` is the integration branch. Start normal work from `dev`, merge completed work back with `--no-ff`, and promote tested `dev` to `main` for a release.
 - Never commit feature work directly to `main`.

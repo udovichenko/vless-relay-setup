@@ -17,10 +17,13 @@ main() {
     local force=false skip_ssh=false
     local relay_fingerprint_arg=""
     local routing_source_arg=""
+    local ru_routing=false
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --force) force=true ;;
             --skip-ssh) skip_ssh=true ;;
+            --enable-ru-routing) ru_routing=true ;;
+            --disable-ru-routing) ru_routing=false ;;
             --fingerprint)
                 if [[ -z "${2:-}" ]]; then
                     log_error "--fingerprint requires a value"
@@ -367,11 +370,14 @@ main() {
     # Write API token + xray template while x-ui is STOPPED, so both load fresh on
     # start (avoids the in-memory-flush overwrite + template-stripping traps), then
     # do all inbound/client work via the live REST API (live gRPC, no restart needed).
+    if [[ "$ru_routing" == true ]]; then
+        validate_relay_ru_routing || exit 1
+    fi
     x-ui stop
     bootstrap_api_token
     routing_apply_xui_settings
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
-        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint"
+        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint" "" "$ru_routing"
     x-ui start
     routing_commit_profile_state
     log_ok "3X-UI started with template + API token loaded"
