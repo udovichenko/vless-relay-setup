@@ -4,6 +4,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/dns.sh"
 source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
 source "$SCRIPT_DIR/lib/xui-api.sh"
@@ -195,6 +196,7 @@ main() {
 
     # --- Step 3: System update ---
     log_info "=== System Update ==="
+    configure_system_dns
     update_system
 
     # --- Step 4: Upgrade 3X-UI (optional) ---

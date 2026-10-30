@@ -2,6 +2,7 @@
 # 3X-UI panel installation and configuration
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/dns.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/xui-api.sh"
 
 XUI_BIN="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/x-ui"
@@ -233,9 +234,10 @@ configure_3xui_relay_template() {
 
     log_info "Writing xray template config to 3X-UI database..."
 
-    local extra_json routing_json
+    local extra_json routing_json dns_json
     extra_json=$(xhttp_extra_json)
     routing_json=$(relay_routing_config "$ru_routing") || return 1
+    dns_json=$(xray_dns_config)
 
     local template
     template=$(jq -n -c \
@@ -249,12 +251,14 @@ configure_3xui_relay_template() {
         --argjson api_port "$api_port" \
         --argjson extra "$extra_json" \
         --argjson routing "$routing_json" \
+        --argjson dns "$dns_json" \
         '{
             log: {
                 loglevel: "warning",
                 access: "/var/log/xray/access.log",
                 error: "/var/log/xray/error.log"
             },
+            dns: $dns,
             api: {
                 services: ["HandlerService", "LoggerService", "StatsService"],
                 tag: "api"
@@ -311,7 +315,8 @@ configure_3xui_relay_template() {
                 },
                 {
                     tag: "direct",
-                    protocol: "freedom"
+                    protocol: "freedom",
+                    settings: {domainStrategy: "UseIP"}
                 },
                 {
                     tag: "block",

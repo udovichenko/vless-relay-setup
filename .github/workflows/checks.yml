@@ -87,4 +87,5 @@ jobs:
           sudo apt-get update && sudo apt-get install -y jq
           bash tests/invariants/test-routing.sh
           bash tests/invariants/test-relay-routing.sh
+          bash tests/invariants/test-dns.sh
           python3 tests/invariants/test_sub_proxy_routing.py
