@@ -377,6 +377,8 @@ main() {
     fi
     x-ui stop
     bootstrap_api_token
+    # Advertise hourly refresh for all subscriptions on new relay installations.
+    xui_db_set "subUpdates" "1"
     routing_apply_xui_settings
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
         "$exit_pubkey" "$exit_short_id" "$exit_sni" "$relay_fingerprint" "" "$ru_routing"
