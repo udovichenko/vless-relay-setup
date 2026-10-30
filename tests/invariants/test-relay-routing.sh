@@ -35,6 +35,10 @@ configure_3xui_relay_template 192.0.2.1 443 00000000-0000-4000-8000-000000000001
     public-key abcd exit.example.com firefox 12345 true >/dev/null
 relay_ru_routing_enabled "$(<"$TEST_TEMPLATE")"
 jq -e '.outbounds[0].tag == "proxy-exit" and .inbounds[0].port == 12345' "$TEST_TEMPLATE" >/dev/null
+jq -e '
+    .dns.servers == ["https+local://1.1.1.1/dns-query", "https+local://8.8.8.8/dns-query"] and
+    any(.outbounds[]; .tag == "direct" and .settings.domainStrategy == "UseIP")
+' "$TEST_TEMPLATE" >/dev/null
 configure_3xui_relay_template 192.0.2.1 443 00000000-0000-4000-8000-000000000001 \
     public-key abcd exit.example.com firefox 12345 >/dev/null
 ! relay_ru_routing_enabled "$(<"$TEST_TEMPLATE")"

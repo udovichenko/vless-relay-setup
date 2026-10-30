@@ -2,6 +2,7 @@
 # XRAY-core installation and configuration
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/dns.sh"
 
 install_xray() {
     log_info "Installing XRAY-core..."
@@ -33,21 +34,9 @@ configure_xray_exit() {
 
     log_info "Configuring XRAY as exit server..."
 
-    local dns_servers_json
-    case "$dns_mode" in
-        adguard)
-            dns_servers_json='"94.140.14.14", "94.140.15.15", "1.1.1.1"'
-            log_info "DNS: AdGuard (ad/tracker filtering)"
-            ;;
-        default)
-            dns_servers_json='"1.1.1.1", "8.8.8.8"'
-            log_info "DNS: Cloudflare + Google (no filtering)"
-            ;;
-        *)
-            log_error "Unknown dns_mode: $dns_mode (expected: adguard|default)"
-            exit 1
-            ;;
-    esac
+    local dns_json
+    dns_json=$(xray_dns_config "$dns_mode") || return 1
+    log_info "DNS: $dns_mode over HTTPS"
 
     cat > /usr/local/etc/xray/config.json << XRAYEOF
 {
@@ -56,9 +45,7 @@ configure_xray_exit() {
         "access": "/var/log/xray/access.log",
         "error": "/var/log/xray/error.log"
     },
-    "dns": {
-        "servers": [${dns_servers_json}]
-    },
+    "dns": ${dns_json},
     "inbounds": [
         {
             "tag": "vless-reality-in",

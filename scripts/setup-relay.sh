@@ -4,6 +4,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/dns.sh"
 source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/reality.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
@@ -207,6 +208,7 @@ main() {
     log_info "=== System Setup ==="
     update_system
     install_dependencies
+    configure_system_dns
 
     routing_resolve_profile "$routing_source_arg" || exit 1
 
