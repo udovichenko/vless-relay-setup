@@ -4,6 +4,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/dns.sh"
 source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
@@ -94,7 +95,7 @@ main() {
     fi
 
     local dns_mode="default"
-    if jq -e '.dns.servers[] | select(. == "94.140.14.14")' "$XRAY_CONFIG" > /dev/null 2>&1; then
+    if jq -e 'any(.dns.servers[]?; . == "94.140.14.14" or . == "https+local://94.140.14.14/dns-query")' "$XRAY_CONFIG" > /dev/null 2>&1; then
         dns_mode="adguard"
     fi
 
@@ -161,6 +162,7 @@ main() {
 
     # --- Step 3: System update ---
     log_info "=== System Update ==="
+    configure_system_dns
     update_system
 
     # --- Step 4: Upgrade binaries (optional) ---

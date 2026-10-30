@@ -107,7 +107,53 @@ sudo ./scripts/setup.sh uninstall --purge-warp
 
 ### DNS-фильтрация
 
-Exit-нода использует AdGuard DNS для фильтрации рекламы и трекеров на уровне DNS. Клиентам ничего настраивать не нужно.
+Exit-нода по умолчанию использует AdGuard DNS для фильтрации рекламы и трекеров
+через DNS-over-HTTPS (с резервным Cloudflare, без фильтрации). Этот режим
+сохраняется при обновлении. Relay использует Cloudflare и Google через
+DNS-over-HTTPS, включая разрешение доменов для серверной RU-маршрутизации.
+
+При установке и обновлении **обеих нод** системный DNS также переключается на
+Cloudflare (`1.1.1.1`, `1.0.0.1`) и Google (`8.8.8.8`) через
+`systemd-resolved` с обязательным DNS-over-TLS. `/etc/resolv.conf` указывает на
+его локальный stub (`127.0.0.53`), а глобальный маршрут `~.` предпочитается
+обычным DNS от DHCP/хостера. Сеть и SSH для этого не перезапускаются.
+Старые файлы сохраняются в `/var/backups/vpn-dns.*`; при ошибке проверки
+разрешения имён настройка автоматически откатывается. Если порт TCP 853
+заблокирован, настройка завершается ошибкой, без перехода на незашифрованный DNS.
+
+Это задаёт провайдеров DNS, но не фиксирует страну их anycast-узла. Также
+серверная настройка не перехватывает DNS, который VPN-клиент отправляет
+самостоятельно стороннему resolver или напрямую через сеть устройства.
+
+**Проверка до и после** (на каждой ноде):
+
+```bash
+readlink -f /etc/resolv.conf
+cat /etc/resolv.conf
+resolvectl status
+dig +short whoami.akamai.net
+getent ahostsv4 example.com
+```
+
+До обновления запишите nameserver и результат `whoami.akamai.net` — последний
+показывает исходящий IP рекурсивного resolver, а не его настроенный адрес.
+Обновите exit, затем relay обычными `update-exit` / `update-relay`. После:
+`resolv.conf` должен вести на `/run/systemd/resolve/stub-resolv.conf`,
+`resolvectl status` — показывать глобальные Cloudflare/Google, `+DNSOverTLS`
+и `~.`. `getent` должен возвращать адреса. Проверка служб и цепочки relay → exit:
+
+```bash
+sudo ./scripts/setup.sh selfcheck
+sudo bash scripts/netprobe.sh --from-relay --xray /usr/local/x-ui/bin/xray-linux-amd64 -n 5 --out /root/netprobe-after
+```
+
+Последняя команда выполняется на relay; путь к Xray выше — для amd64.
+На клиенте перед изменением откройте [ipleak.net](https://ipleak.net/), запишите
+внешний IP и DNS. После обновления переподключите VPN и повторите тест в том
+же браузере с теми же настройками Secure DNS, отдельно для Relay и Direct Exit.
+У выбранного канала должен быть ожидаемый внешний IP, а DNS хостера должны
+исчезнуть. Если они остаются, проверьте DNS и split-routing в VPN-приложении:
+сервер не управляет запросами, обходящими его туннель.
 
 ![DNS-фильтрация](./docs/dns-filtering.svg)
 
