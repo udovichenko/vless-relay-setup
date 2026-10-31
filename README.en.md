@@ -272,6 +272,13 @@ This name is shown for the primary connection in Happ, Shadowrocket, and other
 clients. An empty answer keeps the automatic city-based name. For unattended
 setup, use the `RELAY_CONNECTION_NAME` environment variable.
 
+New relay installations advertise a **1-hour** refresh interval for all
+subscriptions (`subUpdates=1` in 3X-UI), including users added later through
+the panel or `vpn add`. Clients receive `Profile-Update-Interval: 1` on each
+subscription download. `update-relay` preserves the server's current interval.
+Existing clients pick up a changed interval on their next subscription update;
+refresh manually in the app to apply it immediately.
+
 With SelfSteal enabled, additionally:
 
 ```
